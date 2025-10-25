@@ -207,4 +207,4 @@ By contributing, you agree that your contributions will be licensed under the MI
 
 ## Thank You!
 
-Every contribution, no matter how small, helps make this template better for everyone. Thank you for taking the time to contribute! 🙏
+Every contribution, no matter how small, helps make this template better for everyone. Thank you for taking the time to contribute!

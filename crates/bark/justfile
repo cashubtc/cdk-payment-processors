@@ -46,7 +46,7 @@ fmt-check:
 
 # Run all checks (fmt, clippy, test)
 ci: fmt-check lint test
-    @echo "✅ All checks passed!"
+    @echo "All checks passed!"
 
 # Build Docker image
 docker-build:

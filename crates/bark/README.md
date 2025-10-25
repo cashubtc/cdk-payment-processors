@@ -2,28 +2,28 @@
 
 A template for building gRPC-based Lightning Network payment processors that implement the CDK payment processor protocol. This project provides the complete gRPC server infrastructure and a clear interface for integrating your chosen Lightning backend (Blink, LND, Core Lightning, LNbits, etc.).
 
-## 🎯 What is This?
+## What is This?
 
 This is a **template project** - it compiles successfully but won't run until you implement your Lightning backend. Think of it as a starting point that handles all the gRPC complexity, leaving you to focus solely on integrating with your Lightning infrastructure.
 
 ### What's Included
 
-✅ Complete gRPC server implementation  
-✅ Protobuf definitions for CDK payment processor protocol  
-✅ Clean `MintPayment` trait interface  
-✅ Configuration management system  
-✅ TLS support with auto-generated certificates  
-✅ Extensive inline documentation and examples  
-✅ Template backend with `todo!()` placeholders  
+- Complete gRPC server implementation
+- Protobuf definitions for CDK payment processor protocol
+- Clean `MintPayment` trait interface
+- Configuration management system
+- TLS support with auto-generated certificates
+- Extensive inline documentation and examples
+- Template backend with `todo!()` placeholders  
 
 ### What You Need to Add
 
-🔧 Your Lightning backend implementation  
-🔧 API integration code (HTTP, gRPC, WebSocket, etc.)  
-🔧 Backend-specific configuration  
-🔧 Authentication and connection management  
+- Your Lightning backend implementation
+- API integration code (HTTP, gRPC, WebSocket, etc.)
+- Backend-specific configuration
+- Authentication and connection management  
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -46,7 +46,7 @@ cargo check  # Should compile successfully
 
 ### 2. Implement Your Backend
 
-See the [Implementation Guide](#-implementation-guide) below for detailed steps.
+See the [Implementation Guide](#implementation-guide) below for detailed steps.
 
 ### 3. Configure and Run
 
@@ -59,7 +59,7 @@ export API_URL="https://your-backend-api"
 RUST_LOG=info cargo run --release
 ```
 
-## 📖 Implementation Guide
+## Implementation Guide
 
 ### Overview of the MintPayment Trait
 
@@ -348,7 +348,7 @@ grpcurl -plaintext -d '{}' 127.0.0.1:50051 \
   cdk_payment_processor.CdkPaymentProcessor/GetSettings
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 src/
@@ -363,7 +363,7 @@ Dockerfile                # Docker build configuration
 
 The `MintPayment` trait and related types are provided by the `cdk-common` crate.
 
-## 📝 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -392,7 +392,7 @@ blink_api_url = "https://api.blink.sv/graphql"
 blink_api_key = "your-key-here"
 ```
 
-## 🔌 gRPC API
+## gRPC API
 
 The server implements the CDK payment processor protocol with these RPCs:
 
@@ -437,7 +437,7 @@ grpcurl -plaintext -d '{
   cdk_payment_processor.CdkPaymentProcessor/MakePayment
 ```
 
-## 🐳 Docker
+## Docker
 
 ```dockerfile
 # Build
@@ -450,7 +450,7 @@ docker run -p 50051:50051 \
   my-payment-processor
 ```
 
-## 🧪 Testing
+## Testing
 
 ```bash
 # Run tests
@@ -469,7 +469,7 @@ cargo clippy -- -D warnings
 cargo fmt
 ```
 
-## 🛠️ Development Tools
+## Development Tools
 
 ### Using Just (Task Runner)
 
@@ -518,7 +518,7 @@ To run hooks manually:
 pre-commit run --all-files
 ```
 
-## 🔄 Graceful Shutdown
+## Graceful Shutdown
 
 The server handles graceful shutdown when receiving `SIGTERM` or `SIGINT` (Ctrl+C) signals:
 
@@ -540,17 +540,17 @@ The server will:
 
 This is important for production deployments, especially in containerized environments where orchestrators send SIGTERM before forcefully killing processes.
 
-## 🔒 Security Best Practices
+## Security Best Practices
 
-- ✅ Never commit API keys or credentials
-- ✅ Use environment variables for sensitive data
-- ✅ Enable TLS in production (`tls_enable = true`)
-- ✅ Implement proper authentication (mTLS, API tokens)
-- ✅ Run behind a firewall
-- ✅ Validate all inputs (the server handles this)
-- ✅ Use secrets management (Vault, AWS Secrets Manager, etc.)
+- Never commit API keys or credentials
+- Use environment variables for sensitive data
+- Enable TLS in production (`tls_enable = true`)
+- Implement proper authentication (mTLS, API tokens)
+- Run behind a firewall
+- Validate all inputs (the server handles this)
+- Use secrets management (Vault, AWS Secrets Manager, etc.)
 
-## 📚 Additional Resources
+## Additional Resources
 
 ### Lightning Network Documentation
 
@@ -566,7 +566,7 @@ This is important for production deployments, especially in containerized enviro
 - [Tokio Tutorial](https://tokio.rs/tokio/tutorial)
 - [Tonic (gRPC)](https://github.com/hyperium/tonic)
 
-## 🤝 Contributing
+## Contributing
 
 Contributions welcome! Please:
 
@@ -576,11 +576,11 @@ Contributions welcome! Please:
 4. Add tests
 5. Submit a pull request
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) for details
 
-## ❓ FAQ
+## FAQ
 
 ### Q: Can I use this with multiple Lightning backends?
 
@@ -601,7 +601,7 @@ A: Implement reconnection logic in your backend, especially in the `stream_incom
 
 A: Yes! As long as you can implement the `MintPayment` trait methods, you can integrate any Lightning infrastructure.
 
-## 💡 Examples of What You Can Build
+## Examples of What You Can Build
 
 - Blink Payment Processor
 - LND Payment Gateway
@@ -610,11 +610,11 @@ A: Yes! As long as you can implement the `MintPayment` trait methods, you can in
 - Multi-tenant Lightning Service
 - Custom Lightning Infrastructure
 
-## 🎯 Next Steps
+## Next Steps
 
 1. Choose your Lightning backend
 2. Read your backend's API documentation
-3. Follow the [Implementation Guide](#-implementation-guide)
+3. Follow the [Implementation Guide](#implementation-guide)
 4. Test thoroughly
 5. Deploy to production
 6. Share your implementation!
