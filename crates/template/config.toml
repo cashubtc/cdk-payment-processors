@@ -1,0 +1,35 @@
+# Example configuration for CDK Payment Processor Template
+# Copy to config.toml and edit values as needed
+
+# Backend type: mock, blink, lnd, cln, etc.
+backend_type = "mock"
+
+# Backend-specific configuration (examples below)
+[backend]
+# For mock backend, no additional configuration is needed
+
+# For Blink backend (uncomment and configure):
+# api_url = "https://api.blink.sv/graphql"
+# api_key = "your-api-key-here"
+# wallet_id = ""  # Optional; if empty, default wallet is used
+
+# For LND backend (uncomment and configure):
+# host = "localhost:10009"
+# macaroon_path = "/path/to/admin.macaroon"
+# tls_cert_path = "/path/to/tls.cert"
+
+# For Core Lightning backend (uncomment and configure):
+# socket_path = "/path/to/lightning-rpc"
+
+# gRPC server configuration
+server_port = 50051
+
+# TLS configuration (optional)
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+
+# HTTP/2 keep-alive settings (optional)
+# keep_alive_interval = "30s"
+# keep_alive_timeout = "10s"
+# max_connection_age = "30m"
