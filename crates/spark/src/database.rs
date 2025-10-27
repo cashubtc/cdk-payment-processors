@@ -3,7 +3,7 @@
 //! Uses redb to store mappings between mint/melt quotes and Spark payment IDs
 
 use anyhow::Result;
-use redb::{Database, ReadableTable, TableDefinition, ReadableDatabase};
+use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -34,9 +34,7 @@ impl QuoteDatabase {
 
         tracing::info!("Database initialized with mint_quotes and melt_quotes tables");
 
-        Ok(Self {
-            db: Arc::new(db),
-        })
+        Ok(Self { db: Arc::new(db) })
     }
 
     /// Store a mint quote ID to Spark payment ID mapping
@@ -47,7 +45,11 @@ impl QuoteDatabase {
             table.insert(quote_id, payment_id)?;
         }
         write_txn.commit()?;
-        tracing::debug!("Inserted mint quote mapping: {} -> {}", quote_id, payment_id);
+        tracing::debug!(
+            "Inserted mint quote mapping: {} -> {}",
+            quote_id,
+            payment_id
+        );
         Ok(())
     }
 
@@ -59,7 +61,11 @@ impl QuoteDatabase {
             table.insert(quote_id, payment_id)?;
         }
         write_txn.commit()?;
-        tracing::debug!("Inserted melt quote mapping: {} -> {}", quote_id, payment_id);
+        tracing::debug!(
+            "Inserted melt quote mapping: {} -> {}",
+            quote_id,
+            payment_id
+        );
         Ok(())
     }
 

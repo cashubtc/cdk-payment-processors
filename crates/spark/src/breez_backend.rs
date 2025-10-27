@@ -91,8 +91,8 @@ impl BreezBackend {
         }
 
         tracing::info!(
-            "Initializing Breez backend with storage_dir: {}",
-            config.storage_dir
+            "Initializing Breez backend with working_dir: {}",
+            config.working_dir
         );
 
         // Create SDK configuration
@@ -121,7 +121,7 @@ impl BreezBackend {
         let connect_request = ConnectRequest {
             config: sdk_config,
             seed,
-            storage_dir: config.storage_dir.clone(),
+            storage_dir: config.storage_dir(),
         };
 
         // Connect to Breez SDK
@@ -150,8 +150,9 @@ impl BreezBackend {
         }
 
         // Initialize database
-        tracing::info!("Initializing database at: {}", config.db_path);
-        let db = QuoteDatabase::new(&config.db_path)?;
+        let db_path = config.db_path();
+        tracing::info!("Initializing database at: {}", db_path);
+        let db = QuoteDatabase::new(&db_path)?;
 
         Ok(Self {
             sdk: Arc::new(sdk),
@@ -321,6 +322,9 @@ impl MintPayment for BreezBackend {
         unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<MakePaymentResponse, Self::Err> {
+        if *unit != CurrencyUnit::Sat {
+            panic!();
+        }
         match options {
             OutgoingPaymentOptions::Bolt11(opts) => {
                 use breez_sdk_spark::{PrepareSendPaymentRequest, SendPaymentRequest};

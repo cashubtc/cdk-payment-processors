@@ -1,6 +1,6 @@
 # CDK Payment Processor - Breez SDK Spark
 
-A production-ready gRPC-based Lightning Network payment processor that implements the CDK payment processor protocol using the Breez SDK Spark. This processor provides Lightning and Bitcoin payment capabilities with support for BOLT11 invoices, Spark addresses, and more.
+A gRPC-based Lightning Network payment processor that implements the CDK payment processor protocol using the Breez SDK Spark. This processor provides Lightning and Bitcoin payment capabilities with support for BOLT11 invoices, .
 
 ## Features
 
@@ -47,7 +47,9 @@ cargo check  # Verify compilation
 ```bash
 export BREEZ_API_KEY="your-breez-api-key"
 export BREEZ_MNEMONIC="your twelve or twenty four word mnemonic phrase"
-export BREEZ_STORAGE_DIR="./.data"
+# Optional: Defaults to ~/.cdk-spark-payment-processor
+# export WORKING_DIR="$HOME/.cdk-spark-payment-processor"
+export SERVER_ADDR="127.0.0.1"
 export SERVER_PORT="50051"
 ```
 
@@ -60,12 +62,14 @@ cp config.toml.example config.toml
 Edit `config.toml`:
 
 ```toml
+server_addr = "127.0.0.1"
 server_port = 50051
 
 [backend]
 api_key = "your-breez-api-key"
 mnemonic = "your twelve word mnemonic phrase"
-storage_dir = "./.data"
+# Optional: Defaults to ~/.cdk-spark-payment-processor
+# working_dir = "/custom/path/to/data"
 ```
 
 ### 3. Run
@@ -74,11 +78,11 @@ storage_dir = "./.data"
 # Development mode with logging
 RUST_LOG=info cargo run
 
-# Production mode
+# Production release
 cargo run --release
 ```
 
-The gRPC server will start on `0.0.0.0:50051` (or your configured port).
+The gRPC server will start on `127.0.0.1:50051` (or your configured address and port).
 
 ## Configuration
 
@@ -89,11 +93,18 @@ The gRPC server will start on `0.0.0.0:50051` (or your configured port).
 | `BREEZ_API_KEY` | Breez API key | Yes | - |
 | `BREEZ_MNEMONIC` | BIP-39 mnemonic phrase | Yes | - |
 | `BREEZ_PASSPHRASE` | Optional mnemonic passphrase | No | None |
-| `BREEZ_STORAGE_DIR` | Directory for SDK data | No | `./.data` |
+| `WORKING_DIR` | Working directory for all data | No | `~/.cdk-spark-payment-processor` |
+| `SERVER_ADDR` | gRPC server bind address | No | `127.0.0.1` |
 | `SERVER_PORT` | gRPC server port | No | `50051` |
 | `TLS_ENABLE` | Enable TLS | No | `false` |
 | `TLS_CERT_PATH` | TLS certificate path | No | `certs/server.crt` |
 | `TLS_KEY_PATH` | TLS private key path | No | `certs/server.key` |
+
+### Data Storage
+
+The working directory (`WORKING_DIR`) contains all application data:
+- `breez/` - Breez SDK storage (wallet state, channel data, etc.)
+- `quotes.db` - Database for mint/melt quote mappings
 
 ### Configuration File
 
@@ -153,95 +164,6 @@ grpcurl -plaintext -d '{
   cdk_payment_processor.CdkPaymentProcessor/MakePayment
 ```
 
-## Project Structure
-
-```
-src/
-├── breez_backend.rs       # Breez SDK Spark implementation
-├── settings.rs            # Configuration management
-└── main.rs                # Entry point and server setup
-
-config.toml.example        # Example configuration
-Cargo.toml                # Dependencies and project metadata
-Dockerfile                # Docker build configuration
-```
-
-## Development
-
-### Building
-
-```bash
-# Check compilation
-cargo check
-
-# Build debug
-cargo build
-
-# Build release
-cargo build --release
-```
-
-### Testing
-
-```bash
-# Run tests
-cargo test
-
-# Run with logging
-RUST_LOG=debug cargo test
-```
-
-### Code Quality
-
-```bash
-# Lint
-cargo clippy -- -D warnings
-
-# Format
-cargo fmt
-
-# Check formatting
-cargo fmt -- --check
-```
-
-## Docker
-
-### Build
-
-```bash
-docker build -t cdk-payment-processor-spark .
-```
-
-### Run
-
-```bash
-docker run -p 50051:50051 \
-  -e BREEZ_API_KEY="your-key" \
-  -e BREEZ_MNEMONIC="your mnemonic" \
-  cdk-payment-processor-spark
-```
-
-## Security
-
-### Best Practices
-
-- **Never commit credentials**: Keep your mnemonic and API key secure
-- **Use environment variables**: Especially in production environments
-- **Enable TLS**: Use `tls_enable = true` for production deployments
-- **Backup your mnemonic**: This controls access to your funds
-- **Use secrets management**: Consider Vault, AWS Secrets Manager, etc.
-- **Run behind a firewall**: Don't expose the gRPC port publicly without authentication
-
-### Mnemonic Security
-
-Your mnemonic seed phrase is the key to your Lightning wallet. If you lose it, you lose access to your funds. Store it securely:
-
-- Write it down on paper
-- Store it in a password manager
-- Never share it with anyone
-- Never commit it to version control
-- Consider using a hardware security module (HSM) for production
-
 ## Breez SDK Spark
 
 This payment processor uses the [Breez SDK Spark](https://github.com/breez/spark-sdk), which provides:
@@ -277,45 +199,6 @@ The server will:
 4. Disconnect from Breez SDK
 5. Exit cleanly
 
-## Troubleshooting
-
-### Common Issues
-
-**"Failed to connect to Breez SDK"**
-- Check your API key is valid
-- Verify network connectivity
-- Ensure storage directory is writable
-
-**"Invalid mnemonic"**
-- Verify your mnemonic is 12 or 24 words
-- Check for typos or extra spaces
-- Ensure it's a valid BIP-39 mnemonic
-
-**"Port already in use"**
-- Change `SERVER_PORT` to a different port
-- Check if another process is using port 50051
-
-**"TLS certificate not found"**
-- Generate TLS certificates or disable TLS
-- Verify certificate paths are correct
-
-## Performance
-
-The payment processor is designed for high performance:
-
-- **Async/await**: Fully asynchronous Rust using Tokio
-- **Connection pooling**: Efficient resource usage
-- **Streaming**: Real-time payment events with low latency
-- **Graceful degradation**: Continues operating during transient failures
-
-### Benchmarks
-
-Typical performance on modern hardware:
-- Invoice creation: < 100ms
-- Payment sending: 1-3 seconds (network dependent)
-- Event streaming: < 10ms latency
-- gRPC overhead: < 1ms per request
-
 ## Monitoring
 
 ### Logging
@@ -336,26 +219,6 @@ RUST_LOG=trace cargo run
 RUST_LOG=cdk_payment_processor=debug,breez_sdk_spark=info cargo run
 ```
 
-### Metrics
-
-The gRPC server exposes standard metrics via the protocol. Consider adding:
-- Prometheus metrics endpoint
-- Health check endpoint
-- Custom business metrics
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests if applicable
-5. Run `cargo fmt` and `cargo clippy`
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
-
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details
@@ -367,12 +230,5 @@ MIT License - see [LICENSE](LICENSE) for details
 - **Breez SDK Support**: https://t.me/breezsdk
 - **Email**: contact@breez.technology
 
-## Acknowledgments
 
-- [Breez Technology](https://breez.technology/) for the Breez SDK Spark
-- [CDK](https://github.com/cashubtc/cdk) for the payment processor protocol
-- The Lightning Network community
-
----
-
-**Ready to process Lightning payments?** Get your [Breez API key](https://breez.technology/request-api-key/#contact-us-form-sdk) and start accepting Bitcoin!
+You can obtain a Breez API key (required for the `api_key` configuration) from [Breez Technology](https://breez.technology/request-api-key/#contact-us-form-sdk).

@@ -21,11 +21,17 @@ async fn main() -> Result<()> {
     // Initialize Breez SDK backend
     let backend = Arc::new(BreezBackend::new(cfg.backend).await?);
 
-    let server_addr = format!("127.0.0.1");
-    tracing::info!("Starting CDK Payment Processor server on {}", server_addr);
+    tracing::info!(
+        "Starting CDK Payment Processor server on {}:{}",
+        cfg.server_addr,
+        cfg.server_port
+    );
 
-    let mut server =
-        cdk_payment_processor::PaymentProcessorServer::new(backend, &server_addr, cfg.server_port)?;
+    let mut server = cdk_payment_processor::PaymentProcessorServer::new(
+        backend,
+        &cfg.server_addr,
+        cfg.server_port,
+    )?;
 
     server.start(None).await?;
 

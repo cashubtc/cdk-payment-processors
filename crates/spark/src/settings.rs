@@ -19,21 +19,36 @@ pub struct BackendConfig {
     #[serde(default)]
     pub passphrase: Option<String>,
 
-    /// Storage directory for SDK data
-    #[serde(default = "default_storage_dir")]
-    pub storage_dir: String,
-
-    /// Database path for quote mappings
-    #[serde(default = "default_db_path")]
-    pub db_path: String,
+    /// Working directory for all data (SDK storage, database, etc.)
+    #[serde(default = "default_working_dir")]
+    pub working_dir: String,
 }
 
-fn default_storage_dir() -> String {
-    "./.data".to_string()
+impl BackendConfig {
+    /// Get the storage directory for Breez SDK data
+    pub fn storage_dir(&self) -> String {
+        format!("{}/breez", self.working_dir)
+    }
+
+    /// Get the path to the quotes database
+    pub fn db_path(&self) -> String {
+        format!("{}/quotes.db", self.working_dir)
+    }
 }
 
-fn default_db_path() -> String {
-    "./.data/quotes.db".to_string()
+fn default_working_dir() -> String {
+    if let Some(home_dir) = home::home_dir() {
+        home_dir
+            .join(".cdk-spark-payment-processor")
+            .to_string_lossy()
+            .to_string()
+    } else {
+        "./.data".to_string()
+    }
+}
+
+fn default_server_addr() -> String {
+    "127.0.0.1".to_string()
 }
 
 impl Default for BackendConfig {
@@ -42,8 +57,7 @@ impl Default for BackendConfig {
             api_key: String::new(),
             mnemonic: String::new(),
             passphrase: None,
-            storage_dir: default_storage_dir(),
-            db_path: default_db_path(),
+            working_dir: default_working_dir(),
         }
     }
 }
@@ -61,6 +75,10 @@ pub struct Config {
     /// Backend-specific configuration
     #[serde(default)]
     pub backend: BackendConfig,
+
+    /// gRPC server bind address
+    #[serde(default = "default_server_addr")]
+    pub server_addr: String,
 
     /// gRPC server port
     pub server_port: u16,
@@ -88,6 +106,7 @@ impl Default for Config {
         Self {
             backend_type: "mock".to_string(),
             backend: BackendConfig::default(),
+            server_addr: default_server_addr(),
             server_port: 50051,
             tls_enable: false,
             tls_cert_path: "certs/server.crt".to_string(),
@@ -125,13 +144,19 @@ impl Config {
             tracing::info!("Loading configuration from {}", config_path);
             fig = fig.merge(Toml::file(config_path));
         } else {
-            tracing::warn!("Configuration file {} not found, using defaults and environment variables", config_path);
+            tracing::warn!(
+                "Configuration file {} not found, using defaults and environment variables",
+                config_path
+            );
         }
 
         let mut cfg: Config = fig.extract().unwrap_or_default();
 
-        tracing::debug!("Initial config loaded - server_port: {}, tls_enable: {}",
-            cfg.server_port, cfg.tls_enable);
+        tracing::debug!(
+            "Initial config loaded - server_port: {}, tls_enable: {}",
+            cfg.server_port,
+            cfg.tls_enable
+        );
 
         // 2) Overlay environment variables explicitly
         // Breez-specific environment variables
@@ -147,16 +172,16 @@ impl Config {
             tracing::debug!("BREEZ_PASSPHRASE loaded from environment");
             cfg.backend.passphrase = Some(v);
         }
-        if let Ok(v) = std::env::var("BREEZ_STORAGE_DIR") {
-            tracing::debug!("BREEZ_STORAGE_DIR loaded from environment: {}", v);
-            cfg.backend.storage_dir = v;
-        }
-        if let Ok(v) = std::env::var("BREEZ_DB_PATH") {
-            tracing::debug!("BREEZ_DB_PATH loaded from environment: {}", v);
-            cfg.backend.db_path = v;
+        if let Ok(v) = std::env::var("WORKING_DIR") {
+            tracing::debug!("WORKING_DIR loaded from environment: {}", v);
+            cfg.backend.working_dir = v;
         }
 
         // Server configuration
+        if let Ok(v) = std::env::var("SERVER_ADDR") {
+            cfg.server_addr = v;
+            tracing::debug!("SERVER_ADDR loaded from environment: {}", cfg.server_addr);
+        }
         if let Ok(v) = std::env::var("SERVER_PORT") {
             cfg.server_port = v.parse().unwrap_or(cfg.server_port);
             tracing::debug!("SERVER_PORT loaded from environment: {}", cfg.server_port);
@@ -173,10 +198,17 @@ impl Config {
         }
 
         // Log final configuration summary (without sensitive data)
-        tracing::info!("Configuration loaded - storage_dir: {}, server_port: {}",
-            cfg.backend.storage_dir, cfg.server_port);
-        tracing::debug!("API key present: {}, Mnemonic present: {}",
-            !cfg.backend.api_key.is_empty(), !cfg.backend.mnemonic.is_empty());
+        tracing::info!(
+            "Configuration loaded - working_dir: {}, server: {}:{}",
+            cfg.backend.working_dir,
+            cfg.server_addr,
+            cfg.server_port
+        );
+        tracing::debug!(
+            "API key present: {}, Mnemonic present: {}",
+            !cfg.backend.api_key.is_empty(),
+            !cfg.backend.mnemonic.is_empty()
+        );
 
         cfg
     }

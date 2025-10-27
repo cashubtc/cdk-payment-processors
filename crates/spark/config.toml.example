@@ -2,6 +2,7 @@
 # Copy this file to config.toml and fill in your values
 
 backend_type = "breez"
+server_addr = "127.0.0.1"
 server_port = 50051
 
 # TLS Configuration (optional)
@@ -24,5 +25,8 @@ mnemonic = "your twelve or twenty four word mnemonic phrase goes here"
 # Optional passphrase for the mnemonic
 # passphrase = "your-optional-passphrase"
 
-# Directory where Breez SDK will store data
-storage_dir = "./.data"
+# Working directory for all data (defaults to ~/.cdk-spark-payment-processor)
+# This directory will contain:
+#   - breez/        (Breez SDK storage)
+#   - quotes.db     (Quote mappings database)
+# working_dir = "/custom/path/to/data"
