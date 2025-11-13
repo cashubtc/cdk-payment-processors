@@ -139,10 +139,13 @@ impl Config {
         let base: Config = Default::default();
         let mut fig = Figment::from(Serialized::defaults(base));
 
-        let config_path = "config.toml";
-        if std::path::Path::new(config_path).exists() {
+        // Check config file in working directory: ~/.cdk-spark-payment-processor/config.toml
+        let working_dir = default_working_dir();
+        let config_path = format!("{}/config.toml", working_dir);
+
+        if std::path::Path::new(&config_path).exists() {
             tracing::info!("Loading configuration from {}", config_path);
-            fig = fig.merge(Toml::file(config_path));
+            fig = fig.merge(Toml::file(&config_path));
         } else {
             tracing::warn!(
                 "Configuration file {} not found, using defaults and environment variables",

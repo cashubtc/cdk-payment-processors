@@ -6,12 +6,11 @@
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use breez_sdk_spark::{
     BreezSdk, Config, ConnectRequest, Network, ReceivePaymentMethod, ReceivePaymentRequest, Seed,
-    WaitForPaymentIdentifier, WaitForPaymentRequest,
 };
 use cdk_common::bitcoin::hashes::Hash;
 use cdk_common::nuts::{CurrencyUnit, MeltQuoteState};
@@ -33,13 +32,15 @@ pub struct BreezBackend {
     wait_invoice_active: Arc<AtomicBool>,
     /// Database for storing quote-to-payment mappings
     db: QuoteDatabase,
+    /// Event listener IDs for cleanup on disconnect
+    listener_ids: Arc<Mutex<Vec<String>>>,
 }
 
 impl BreezBackend {
     /// Store a mint quote mapping (payment hash -> payment request)
     fn store_mint_quote(
         &self,
-        payment_hash: &str,
+        payment_hash: &[u8; 32],
         payment_request: &str,
     ) -> Result<(), cdk_common::payment::Error> {
         self.db
@@ -50,7 +51,7 @@ impl BreezBackend {
     /// Get the payment request for a mint quote by payment hash
     fn get_mint_quote(
         &self,
-        payment_hash: &str,
+        payment_hash: &[u8; 32],
     ) -> Result<Option<String>, cdk_common::payment::Error> {
         self.db
             .get_mint_quote(payment_hash)
@@ -60,7 +61,7 @@ impl BreezBackend {
     /// Store a melt quote mapping (payment hash -> payment request)
     fn store_melt_quote(
         &self,
-        payment_hash: &str,
+        payment_hash: &[u8; 32],
         payment_request: &str,
     ) -> Result<(), cdk_common::payment::Error> {
         self.db
@@ -71,7 +72,7 @@ impl BreezBackend {
     /// Get the payment request for a melt quote by payment hash
     fn get_melt_quote(
         &self,
-        payment_hash: &str,
+        payment_hash: &[u8; 32],
     ) -> Result<Option<String>, cdk_common::payment::Error> {
         self.db
             .get_melt_quote(payment_hash)
@@ -158,7 +159,31 @@ impl BreezBackend {
             sdk: Arc::new(sdk),
             wait_invoice_active: Arc::new(AtomicBool::new(false)),
             db,
+            listener_ids: Arc::new(Mutex::new(Vec::new())),
         })
+    }
+
+    /// Disconnect from Breez SDK and cleanup resources
+    pub async fn disconnect(&self) -> anyhow::Result<()> {
+        tracing::info!("Disconnecting from Breez SDK...");
+
+        // First, remove all event listeners
+        if let Ok(mut ids) = self.listener_ids.lock() {
+            tracing::info!("Removing {} event listener(s)", ids.len());
+            for listener_id in ids.drain(..) {
+                if !self.sdk.remove_event_listener(&listener_id).await {
+                    tracing::warn!("Failed to remove event listener: {}", listener_id);
+                }
+            }
+        }
+
+        // Then disconnect from the SDK
+        self.sdk
+            .disconnect()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to disconnect from Breez SDK: {:?}", e))?;
+        tracing::info!("Breez SDK disconnected successfully");
+        Ok(())
     }
 }
 
@@ -223,19 +248,14 @@ impl MintPayment for BreezBackend {
 
                 let invoice = Bolt11Invoice::from_str(&response.payment_request)?;
                 let payment_hash = invoice.payment_hash();
-                let payment_hash_hex = hex::encode(payment_hash.as_byte_array());
+                let payment_hash_bytes = payment_hash.as_byte_array();
                 let payment_identifier =
                     PaymentIdentifier::PaymentHash(payment_hash.to_byte_array());
 
                 tracing::debug!("Payment identifier created: {:?}", payment_identifier);
 
                 // Store the mapping: payment_hash -> payment_request
-                self.store_mint_quote(&payment_hash_hex, &response.payment_request)?;
-                tracing::debug!(
-                    "Stored mint quote mapping: {} -> {}",
-                    payment_hash_hex,
-                    response.payment_request
-                );
+                self.store_mint_quote(payment_hash_bytes, &response.payment_request)?;
 
                 Ok(CreateIncomingPaymentResponse {
                     request_lookup_id: payment_identifier,
@@ -292,17 +312,12 @@ impl MintPayment for BreezBackend {
                 // Extract payment hash from the invoice and store mapping
                 let invoice = Bolt11Invoice::from_str(&bolt11_str)?;
                 let payment_hash = invoice.payment_hash();
-                let payment_hash_hex = hex::encode(payment_hash.as_byte_array());
+                let payment_hash_bytes = payment_hash.as_byte_array();
                 let payment_identifier =
                     PaymentIdentifier::PaymentHash(payment_hash.to_byte_array());
 
                 // Store the mapping: payment_hash -> payment_request
-                self.store_melt_quote(&payment_hash_hex, &bolt11_str)?;
-                tracing::debug!(
-                    "Stored melt quote mapping: {} -> {}",
-                    payment_hash_hex,
-                    bolt11_str
-                );
+                self.store_melt_quote(payment_hash_bytes, &bolt11_str)?;
 
                 Ok(PaymentQuoteResponse {
                     request_lookup_id: Some(payment_identifier),
@@ -319,12 +334,9 @@ impl MintPayment for BreezBackend {
     /// Make an outgoing payment
     async fn make_payment(
         &self,
-        unit: &CurrencyUnit,
+        _unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<MakePaymentResponse, Self::Err> {
-        if *unit != CurrencyUnit::Sat {
-            panic!();
-        }
         match options {
             OutgoingPaymentOptions::Bolt11(opts) => {
                 use breez_sdk_spark::{PrepareSendPaymentRequest, SendPaymentRequest};
@@ -374,18 +386,16 @@ impl MintPayment for BreezBackend {
                     payment_amount,
                     payment_fees,
                     total_spent,
-                    unit.to_string(),
+                    _unit.to_string(),
                     send_response.payment.id
                 );
 
                 // Extract payment hash from the invoice
                 let invoice = Bolt11Invoice::from_str(&bolt11_str)?;
                 let payment_hash = invoice.payment_hash();
-                let payment_hash_hex = hex::encode(payment_hash.as_byte_array());
                 let payment_identifier =
                     PaymentIdentifier::PaymentHash(payment_hash.to_byte_array());
 
-                tracing::debug!("Payment hash: {}", payment_hash_hex);
                 tracing::info!("Payment total spent: {}", total_spent);
 
                 Ok(MakePaymentResponse {
@@ -474,7 +484,12 @@ impl MintPayment for BreezBackend {
 
         let listener = Box::new(PaymentEventListener { sender: tx });
 
-        let _listener_id = self.sdk.add_event_listener(listener).await;
+        let listener_id = self.sdk.add_event_listener(listener).await;
+
+        // Store the listener ID for cleanup on disconnect
+        if let Ok(mut ids) = self.listener_ids.lock() {
+            ids.push(listener_id);
+        }
 
         Ok(Box::pin(ReceiverStream::new(rx)))
     }
@@ -499,15 +514,17 @@ impl MintPayment for BreezBackend {
             payment_identifier
         );
 
-        // Convert payment identifier to hex string
-        let payment_hash_hex = match payment_identifier {
-            PaymentIdentifier::PaymentHash(hash) => hex::encode(hash),
-            _ => payment_identifier.to_string(),
+        // Extract payment hash bytes
+        let payment_hash_bytes = match payment_identifier {
+            PaymentIdentifier::PaymentHash(hash) => hash,
+            _ => {
+                tracing::warn!("Unsupported payment identifier type");
+                return Ok(vec![]);
+            }
         };
-        tracing::debug!("Payment hash (hex): {}", payment_hash_hex);
 
         // Get the stored payment request from the database
-        let payment_request = match self.get_mint_quote(&payment_hash_hex)? {
+        let payment_request = match self.get_mint_quote(payment_hash_bytes)? {
             Some(req) => {
                 tracing::debug!("Found stored payment request: {}", req);
                 req
@@ -515,53 +532,69 @@ impl MintPayment for BreezBackend {
             None => {
                 tracing::warn!(
                     "No stored payment request found for hash: {}",
-                    payment_hash_hex
+                    hex::encode(payment_hash_bytes)
                 );
                 return Ok(vec![]);
             }
         };
 
-        // Use wait_for_payment to check the status
-        let request = WaitForPaymentRequest {
-            identifier: WaitForPaymentIdentifier::PaymentRequest(payment_request.clone()),
-        };
-
+        use breez_sdk_spark::{ListPaymentsRequest, PaymentStatus, PaymentType};
         use cdk_common::amount::Amount;
 
-        tracing::debug!("Calling Breez SDK wait_for_payment");
-        match self.sdk.wait_for_payment(request).await {
-            Ok(response) => {
+        // List payments and find the matching one by payment request (invoice)
+        let request = ListPaymentsRequest {
+            type_filter: Some(vec![PaymentType::Receive]),
+            ..Default::default()
+        };
+
+        tracing::debug!("Calling Breez SDK list_payments");
+        let response = self
+            .sdk
+            .list_payments(request)
+            .await
+            .map_err(|e| cdk_common::payment::Error::Lightning(Box::new(e)))?;
+
+        // Find the payment by payment request (invoice)
+        let payment = response.payments.into_iter().find(|p| {
+            // Compare invoice in payment details if available
+            if let Some(breez_sdk_spark::PaymentDetails::Lightning { ref invoice, .. }) = p.details
+            {
+                invoice == &payment_request
+            } else {
+                false
+            }
+        });
+
+        if let Some(payment) = payment {
+            // Only return if the payment is completed
+            if payment.status == PaymentStatus::Completed {
                 tracing::info!(
-                    "Payment found - id: {}, amount: {}, fees: {}",
-                    response.payment.id,
-                    response.payment.amount,
-                    response.payment.fees
+                    "Payment found - id: {}, amount: {}, fees: {}, status: {:?}",
+                    payment.id,
+                    payment.amount,
+                    payment.fees,
+                    payment.status
                 );
 
                 let payment_response = WaitPaymentResponse {
-                    payment_id: response.payment.id.clone(),
-                    payment_identifier: PaymentIdentifier::PaymentHash(
-                        response.payment.id.as_bytes()[..32]
-                            .try_into()
-                            .unwrap_or([0; 32]),
-                    ),
-                    payment_amount: Amount::from(
-                        (response.payment.amount + response.payment.fees) as u64,
-                    ),
+                    payment_id: payment.id.clone(),
+                    payment_identifier: payment_identifier.clone(),
+                    payment_amount: Amount::from((payment.amount + payment.fees) as u64),
                     unit: CurrencyUnit::Sat,
                 };
 
                 tracing::debug!("Returning payment response: {:?}", payment_response);
                 Ok(vec![payment_response])
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Payment not found or error checking status for {}: {:?}",
-                    payment_request,
-                    e
+            } else {
+                tracing::debug!(
+                    "Payment found but not completed yet - status: {:?}",
+                    payment.status
                 );
                 Ok(vec![])
             }
+        } else {
+            tracing::debug!("Payment not found for invoice: {}", payment_request);
+            Ok(vec![])
         }
     }
 
@@ -573,18 +606,18 @@ impl MintPayment for BreezBackend {
         use breez_sdk_spark::{ListPaymentsRequest, PaymentStatus, PaymentType};
         use cdk_common::amount::Amount;
 
-        // Convert payment identifier to hex string
-        let payment_hash_hex = match payment_identifier {
-            PaymentIdentifier::PaymentHash(hash) => hex::encode(hash),
-            _ => payment_identifier.to_string(),
+        // Extract payment hash bytes
+        let payment_hash_bytes = match payment_identifier {
+            PaymentIdentifier::PaymentHash(hash) => hash,
+            _ => {
+                return Err(cdk_common::payment::Error::Custom(
+                    "Unsupported payment identifier type".to_string(),
+                ));
+            }
         };
-        tracing::debug!(
-            "Checking outgoing payment with hash (hex): {}",
-            payment_hash_hex
-        );
 
         // Get the stored payment request from the database
-        let payment_request = match self.get_melt_quote(&payment_hash_hex)? {
+        let payment_request = match self.get_melt_quote(payment_hash_bytes)? {
             Some(req) => {
                 tracing::debug!("Found stored payment request: {}", req);
                 req
@@ -592,7 +625,7 @@ impl MintPayment for BreezBackend {
             None => {
                 tracing::warn!(
                     "No stored payment request found for hash: {}",
-                    payment_hash_hex
+                    hex::encode(payment_hash_bytes)
                 );
                 return Err(cdk_common::payment::Error::Custom(
                     "Payment not found in database".to_string(),
@@ -615,33 +648,40 @@ impl MintPayment for BreezBackend {
         let payments = response.payments;
 
         // Find the payment by payment request (invoice)
-        let payment = payments
-            .into_iter()
-            .find(|p| {
-                // Compare invoice in payment details if available
-                if let Some(breez_sdk_spark::PaymentDetails::Lightning { ref invoice, .. }) =
-                    p.details
-                {
-                    invoice == &payment_request
-                } else {
-                    false
-                }
-            })
-            .ok_or(cdk_common::payment::Error::Custom(
-                "Payment not found".to_string(),
-            ))?;
+        let payment = payments.into_iter().find(|p| {
+            // Compare invoice in payment details if available
+            if let Some(breez_sdk_spark::PaymentDetails::Lightning { ref invoice, .. }) = p.details
+            {
+                invoice == &payment_request
+            } else {
+                false
+            }
+        });
 
-        let status = match payment.status {
-            PaymentStatus::Completed => MeltQuoteState::Paid,
-            PaymentStatus::Failed => MeltQuoteState::Unpaid,
-            PaymentStatus::Pending => MeltQuoteState::Pending,
+        let (status, total_spent) = if let Some(payment) = payment {
+            let status = match payment.status {
+                PaymentStatus::Completed => MeltQuoteState::Paid,
+                PaymentStatus::Failed => MeltQuoteState::Unpaid,
+                PaymentStatus::Pending => MeltQuoteState::Pending,
+            };
+            let total_spent = Amount::from((payment.amount + payment.fees) as u64);
+            tracing::debug!(
+                "Payment found - status: {:?}, total_spent: {}",
+                status,
+                total_spent
+            );
+            (status, total_spent)
+        } else {
+            // Payment not found - only quoted, never sent
+            tracing::debug!("Payment not found for invoice: {}", payment_request);
+            (MeltQuoteState::Unpaid, Amount::from(0))
         };
 
         Ok(MakePaymentResponse {
             payment_lookup_id: payment_identifier.clone(),
             payment_proof: None,
             status,
-            total_spent: Amount::from((payment.amount + payment.fees) as u64),
+            total_spent,
             unit: CurrencyUnit::Sat,
         })
     }

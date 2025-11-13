@@ -108,6 +108,11 @@ The working directory (`WORKING_DIR`) contains all application data:
 
 ### Configuration File
 
+The application looks for `config.toml` in the working directory:
+- `~/.cdk-spark-payment-processor/config.toml` (or `$WORKING_DIR/config.toml` if set)
+
+Environment variables override configuration file values.
+
 See `config.toml.example` for a complete configuration template.
 
 ## gRPC API

@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     );
 
     let mut server = cdk_payment_processor::PaymentProcessorServer::new(
-        backend,
+        backend.clone(),
         &cfg.server_addr,
         cfg.server_port,
     )?;
@@ -39,6 +39,11 @@ async fn main() -> Result<()> {
     match shutdown_signal().await {
         Ok(_) => tracing::info!("Shutdown signal received, stopping server..."),
         Err(e) => tracing::error!("Error waiting for shutdown signal: {}", e),
+    }
+
+    // Disconnect from Breez SDK before stopping server
+    if let Err(e) = backend.disconnect().await {
+        tracing::error!("Error disconnecting from Breez SDK: {}", e);
     }
 
     server.stop().await?;
