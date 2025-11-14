@@ -6,7 +6,7 @@
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use breez_sdk_spark::{
@@ -20,6 +20,7 @@ use cdk_common::payment::{
 };
 use cdk_common::Bolt11Invoice;
 use futures_core::Stream;
+use tokio::sync::Mutex;
 
 use crate::database::QuoteDatabase;
 use crate::settings::BackendConfig;
@@ -168,12 +169,11 @@ impl BreezBackend {
         tracing::info!("Disconnecting from Breez SDK...");
 
         // First, remove all event listeners
-        if let Ok(mut ids) = self.listener_ids.lock() {
-            tracing::info!("Removing {} event listener(s)", ids.len());
-            for listener_id in ids.drain(..) {
-                if !self.sdk.remove_event_listener(&listener_id).await {
-                    tracing::warn!("Failed to remove event listener: {}", listener_id);
-                }
+        let mut ids = self.listener_ids.lock().await;
+        tracing::info!("Removing {} event listener(s)", ids.len());
+        for listener_id in ids.drain(..) {
+            if !self.sdk.remove_event_listener(&listener_id).await {
+                tracing::warn!("Failed to remove event listener: {}", listener_id);
             }
         }
 
@@ -487,9 +487,7 @@ impl MintPayment for BreezBackend {
         let listener_id = self.sdk.add_event_listener(listener).await;
 
         // Store the listener ID for cleanup on disconnect
-        if let Ok(mut ids) = self.listener_ids.lock() {
-            ids.push(listener_id);
-        }
+        self.listener_ids.lock().await.push(listener_id);
 
         Ok(Box::pin(ReceiverStream::new(rx)))
     }
