@@ -134,7 +134,8 @@ cargo clippy
 
 ```
 src/
-├── template_backend.rs  # Template backend implementation
+├── breez_backend.rs    # Breez SDK Spark backend implementation
+├── database.rs         # Quote database for payment mappings
 ├── settings.rs         # Configuration management
 └── main.rs            # Server entry point
 ```

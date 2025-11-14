@@ -68,10 +68,6 @@ impl Default for BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend type identifier (e.g., "blink", "lnd", "cln", "mock")
-    #[serde(default)]
-    pub backend_type: String,
-
     /// Backend-specific configuration
     #[serde(default)]
     pub backend: BackendConfig,
@@ -87,33 +83,17 @@ pub struct Config {
     pub tls_enable: bool,
     pub tls_cert_path: String,
     pub tls_key_path: String,
-
-    /// HTTP/2 keep-alive interval (e.g., "30s")
-    #[serde(default)]
-    pub keep_alive_interval: Option<String>,
-
-    /// HTTP/2 keep-alive timeout (e.g., "10s")
-    #[serde(default)]
-    pub keep_alive_timeout: Option<String>,
-
-    /// Maximum connection age (e.g., "30m")
-    #[serde(default)]
-    pub max_connection_age: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend_type: "mock".to_string(),
             backend: BackendConfig::default(),
             server_addr: default_server_addr(),
             server_port: 50051,
             tls_enable: false,
             tls_cert_path: "certs/server.crt".to_string(),
             tls_key_path: "certs/server.key".to_string(),
-            keep_alive_interval: None,
-            keep_alive_timeout: None,
-            max_connection_age: None,
         }
     }
 }
@@ -121,26 +101,14 @@ impl Default for Config {
 impl Config {
     /// Load from config.toml (if present) and environment variables.
     /// Environment variables override file values.
-    ///
-    /// # TODO
-    /// Add environment variable loading for your backend-specific configuration
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// if let Ok(v) = std::env::var("API_URL") {
-    ///     cfg.api_url = v;
-    /// }
-    /// if let Ok(v) = std::env::var("API_KEY") {
-    ///     cfg.api_key = v;
-    /// }
-    /// ```
     pub fn load() -> Self {
         // 1) Start with defaults + config.toml only if it exists
         let base: Config = Default::default();
         let mut fig = Figment::from(Serialized::defaults(base));
 
-        // Check config file in working directory: ~/.cdk-spark-payment-processor/config.toml
-        let working_dir = default_working_dir();
+        // Check WORKING_DIR env var first to determine config file location
+        let working_dir = std::env::var("WORKING_DIR").unwrap_or_else(|_| default_working_dir());
+
         let config_path = format!("{}/config.toml", working_dir);
 
         if std::path::Path::new(&config_path).exists() {
@@ -175,6 +143,7 @@ impl Config {
             tracing::debug!("BREEZ_PASSPHRASE loaded from environment");
             cfg.backend.passphrase = Some(v);
         }
+        // Ensure working_dir is set from env var (in case config file had different value)
         if let Ok(v) = std::env::var("WORKING_DIR") {
             tracing::debug!("WORKING_DIR loaded from environment: {}", v);
             cfg.backend.working_dir = v;

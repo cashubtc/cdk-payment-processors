@@ -1,7 +1,6 @@
 # CDK Payment Processor - Breez SDK Spark Configuration Example
 # Copy this file to config.toml and fill in your values
 
-backend_type = "breez"
 server_addr = "127.0.0.1"
 server_port = 50051
 
@@ -9,11 +8,6 @@ server_port = 50051
 tls_enable = false
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
-
-# HTTP/2 Keep-alive settings (optional)
-# keep_alive_interval = "30s"
-# keep_alive_timeout = "10s"
-# max_connection_age = "30m"
 
 [backend]
 # Breez API key - Get one from https://breez.technology/request-api-key/#contact-us-form-sdk

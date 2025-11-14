@@ -1,15 +1,13 @@
 # CDK Payment Processor - Breez SDK Spark
 
-A gRPC-based Lightning Network payment processor that implements the CDK payment processor protocol using the Breez SDK Spark. This processor provides Lightning and Bitcoin payment capabilities with support for BOLT11 invoices, .
+A gRPC-based Lightning Network payment processor that implements the CDK payment processor protocol using the Breez SDK Spark. This processor provides Lightning and Bitcoin payment capabilities with support for BOLT11 invoices.
 
 ## Features
 
 - **BOLT11 Lightning Invoices**: Create and pay Lightning invoices
-- **Spark Address Support**: Direct peer-to-peer payments between Spark users
 - **Real-time Payment Events**: Event-driven notifications for incoming payments
 - **Payment History**: Track and query payment status
 - **Fee Estimation**: Get accurate fee quotes before sending payments
-- **Multi-path Payments**: Support for MPP (Multi-Path Payments)
 - **Graceful Shutdown**: Proper cleanup and resource management
 
 ## Architecture
@@ -35,8 +33,8 @@ This payment processor:
 ### 1. Clone the Repository
 
 ```bash
-git clone <your-repo>
-cd cdk-payment-processor-spark
+git clone https://github.com/thesimplekid/cdk-spark-payment-prcoessor.git
+cd cdk-spark-payment-prcoessor
 cargo check  # Verify compilation
 ```
 
@@ -108,8 +106,9 @@ The working directory (`WORKING_DIR`) contains all application data:
 
 ### Configuration File
 
-The application looks for `config.toml` in the working directory:
-- `~/.cdk-spark-payment-processor/config.toml` (or `$WORKING_DIR/config.toml` if set)
+The application looks for `config.toml` in:
+- `$WORKING_DIR/config.toml` if the `WORKING_DIR` environment variable is set
+- `~/.cdk-spark-payment-processor/config.toml` by default
 
 Environment variables override configuration file values.
 
@@ -227,13 +226,5 @@ RUST_LOG=cdk_payment_processor=debug,breez_sdk_spark=info cargo run
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/cdk-payment-processor-spark/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/cdk-payment-processor-spark/discussions)
-- **Breez SDK Support**: https://t.me/breezsdk
-- **Email**: contact@breez.technology
-
 
 You can obtain a Breez API key (required for the `api_key` configuration) from [Breez Technology](https://breez.technology/request-api-key/#contact-us-form-sdk).
