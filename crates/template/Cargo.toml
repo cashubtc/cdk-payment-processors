@@ -10,8 +10,8 @@ license = "MIT"
 anyhow = "1"
 async-trait = "0.1"
 bytes = "1"
-cdk-common = { version = "0.13.1", default-features = false, features = ["mint"] }
-cdk-payment-processor = { version = "0.13.1", default-features = false }
+cdk-common = { version = "0.15.0-rc.1", default-features = false, features = ["mint"] }
+cdk-payment-processor = { version = "0.15.0-rc.1", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
 figment = { version = "0.10", features = ["env", "toml"] }
 futures-core = "0.3.31"
@@ -20,13 +20,12 @@ serde_json = "1"
 thiserror = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal", "test-util"] }
 tokio-stream = "0.1"
-tonic = { version = "0.12", features = ["transport", "tls"] }
-tonic-reflection = "0.12"
+tonic = { version = "0.14", features = ["transport"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14"
 
 [features]
 default = []

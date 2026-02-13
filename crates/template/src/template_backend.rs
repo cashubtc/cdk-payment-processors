@@ -19,8 +19,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use cdk_common::nuts::CurrencyUnit;
 use cdk_common::payment::{
-    CreateIncomingPaymentResponse, Event, IncomingPaymentOptions, MakePaymentResponse, MintPayment,
-    OutgoingPaymentOptions, PaymentIdentifier, PaymentQuoteResponse, WaitPaymentResponse,
+    Bolt11Settings, CreateIncomingPaymentResponse, Event, IncomingPaymentOptions, MakePaymentResponse,
+    MintPayment, OutgoingPaymentOptions, PaymentIdentifier, PaymentQuoteResponse, SettingsResponse,
+    WaitPaymentResponse,
 };
 use futures_core::Stream;
 
@@ -96,24 +97,26 @@ impl MintPayment for TemplateBackend {
     type Err = cdk_common::payment::Error;
 
     /// Get backend settings - returns capabilities and supported features
-    async fn get_settings(&self) -> Result<serde_json::Value, Self::Err> {
+    async fn get_settings(&self) -> Result<SettingsResponse, Self::Err> {
         // TODO: Update this to reflect your backend's actual capabilities
         //
-        // Return a JSON value describing what your backend supports:
-        // - bolt11: true if BOLT11 invoices supported
-        // - bolt12: true if BOLT12 offers supported
-        // - mpp: true if multi-path payments supported
-        // - amp: true if atomic multi-path payments supported
+        // Return SettingsResponse describing what your backend supports:
+        // - bolt11: BOLT11 settings (MPP, amountless, invoice description support)
+        // - bolt12: BOLT12 settings (None if not supported)
         // - unit: "sat", "msat", "btc", etc.
+        // - custom: additional settings as key-value pairs
         //
         // Example for a basic backend:
-        Ok(serde_json::json!({
-            "bolt11": true,
-            "bolt12": false,
-            "mpp": false,
-            "amp": false,
-            "unit": "sat",
-        }))
+        Ok(SettingsResponse {
+            unit: "sat".to_string(),
+            bolt11: Some(Bolt11Settings {
+                mpp: false,
+                amountless: false,
+                invoice_description: true,
+            }),
+            bolt12: None,
+            custom: std::collections::HashMap::new(),
+        })
     }
 
     /// Create an incoming payment request (invoice)
