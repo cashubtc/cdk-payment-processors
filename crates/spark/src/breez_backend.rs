@@ -3,6 +3,7 @@
 //! This implementation uses the Breez SDK Spark to provide Lightning payment functionality
 //! for the CDK payment processor.
 
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,8 +16,9 @@ use breez_sdk_spark::{
 use cdk_common::bitcoin::hashes::Hash;
 use cdk_common::nuts::{CurrencyUnit, MeltQuoteState};
 use cdk_common::payment::{
-    CreateIncomingPaymentResponse, Event, IncomingPaymentOptions, MakePaymentResponse, MintPayment,
-    OutgoingPaymentOptions, PaymentIdentifier, PaymentQuoteResponse, WaitPaymentResponse,
+    Bolt11Settings, CreateIncomingPaymentResponse, Event, IncomingPaymentOptions,
+    MakePaymentResponse, MintPayment, OutgoingPaymentOptions, PaymentIdentifier,
+    PaymentQuoteResponse, SettingsResponse, WaitPaymentResponse,
 };
 use cdk_common::Bolt11Invoice;
 use futures_core::Stream;
@@ -192,18 +194,18 @@ impl MintPayment for BreezBackend {
     type Err = cdk_common::payment::Error;
 
     /// Get backend settings - returns capabilities and supported features
-    async fn get_settings(&self) -> Result<serde_json::Value, Self::Err> {
+    async fn get_settings(&self) -> Result<SettingsResponse, Self::Err> {
         // Breez SDK Spark supports BOLT11 invoices and Spark payments
-        Ok(serde_json::json!({
-            "bolt11": true,
-            "bolt12": false,
-            "mpp": true,
-            "amp": false,
-            "unit": "sat",
-            "spark": true,
-            "invoice_description": false,
-            "amountless": false
-        }))
+        Ok(SettingsResponse {
+            unit: "sat".to_string(),
+            bolt11: Some(Bolt11Settings {
+                mpp: true,
+                amountless: false,
+                invoice_description: false,
+            }),
+            bolt12: None,
+            custom: HashMap::new(),
+        })
     }
 
     /// Create an incoming payment request (invoice)
@@ -261,6 +263,7 @@ impl MintPayment for BreezBackend {
                     request_lookup_id: payment_identifier,
                     request: response.payment_request,
                     expiry: None,
+                    extra_json: None,
                 })
             }
             _ => {
@@ -321,9 +324,8 @@ impl MintPayment for BreezBackend {
 
                 Ok(PaymentQuoteResponse {
                     request_lookup_id: Some(payment_identifier),
-                    amount,
-                    fee,
-                    unit: unit.clone(),
+                    amount: amount.with_unit(unit.clone()),
+                    fee: fee.with_unit(unit.clone()),
                     state: MeltQuoteState::Unpaid,
                 })
             }
@@ -402,8 +404,7 @@ impl MintPayment for BreezBackend {
                     payment_lookup_id: payment_identifier,
                     payment_proof: None,
                     status: MeltQuoteState::Paid,
-                    total_spent,
-                    unit: CurrencyUnit::Sat,
+                    total_spent: total_spent.with_unit(CurrencyUnit::Sat),
                 })
             }
             _ => Err(cdk_common::payment::Error::UnsupportedPaymentOption),
@@ -473,8 +474,10 @@ impl MintPayment for BreezBackend {
                     let cdk_event = Event::PaymentReceived(WaitPaymentResponse {
                         payment_id: payment.id.clone(),
                         payment_identifier,
-                        payment_amount: Amount::from((payment.amount + payment.fees) as u64),
-                        unit: CurrencyUnit::Sat,
+                        payment_amount: Amount::new(
+                            (payment.amount + payment.fees) as u64,
+                            CurrencyUnit::Sat,
+                        ),
                     });
 
                     let _ = self.sender.send(cdk_event).await;
@@ -577,8 +580,10 @@ impl MintPayment for BreezBackend {
                 let payment_response = WaitPaymentResponse {
                     payment_id: payment.id.clone(),
                     payment_identifier: payment_identifier.clone(),
-                    payment_amount: Amount::from((payment.amount + payment.fees) as u64),
-                    unit: CurrencyUnit::Sat,
+                    payment_amount: Amount::new(
+                        (payment.amount + payment.fees) as u64,
+                        CurrencyUnit::Sat,
+                    ),
                 };
 
                 tracing::debug!("Returning payment response: {:?}", payment_response);
@@ -662,7 +667,8 @@ impl MintPayment for BreezBackend {
                 PaymentStatus::Failed => MeltQuoteState::Unpaid,
                 PaymentStatus::Pending => MeltQuoteState::Pending,
             };
-            let total_spent = Amount::from((payment.amount + payment.fees) as u64);
+            let total_spent =
+                Amount::new((payment.amount + payment.fees) as u64, CurrencyUnit::Sat);
             tracing::debug!(
                 "Payment found - status: {:?}, total_spent: {}",
                 status,
@@ -672,7 +678,7 @@ impl MintPayment for BreezBackend {
         } else {
             // Payment not found - only quoted, never sent
             tracing::debug!("Payment not found for invoice: {}", payment_request);
-            (MeltQuoteState::Unpaid, Amount::from(0))
+            (MeltQuoteState::Unpaid, Amount::new(0, CurrencyUnit::Sat))
         };
 
         Ok(MakePaymentResponse {
@@ -680,7 +686,6 @@ impl MintPayment for BreezBackend {
             payment_proof: None,
             status,
             total_spent,
-            unit: CurrencyUnit::Sat,
         })
     }
 }
