@@ -11,15 +11,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use breez_sdk_spark::{
-    BreezSdk, Config, ConnectRequest, Network, ReceivePaymentMethod, ReceivePaymentRequest, Seed,
+    BreezSdk, Config, ConnectRequest, Network, OptimizationConfig, ReceivePaymentMethod,
+    ReceivePaymentRequest, Seed,
 };
 use cdk_common::bitcoin::hashes::Hash;
 use cdk_common::nuts::{CurrencyUnit, MeltQuoteState};
 use cdk_common::payment::{
-    Bolt11Settings, CreateIncomingPaymentResponse, Event, IncomingPaymentOptions,
+    Bolt11Settings, CreateIncomingPaymentResponse, Error, Event, IncomingPaymentOptions,
     MakePaymentResponse, MintPayment, OutgoingPaymentOptions, PaymentIdentifier,
     PaymentQuoteResponse, SettingsResponse, WaitPaymentResponse,
 };
+use cdk_common::util::unix_time;
 use cdk_common::Bolt11Invoice;
 use futures_core::Stream;
 use tokio::sync::Mutex;
@@ -109,6 +111,15 @@ impl BreezBackend {
             prefer_spark_over_lightning: true,
             external_input_parsers: None,
             use_default_external_input_parsers: true,
+            real_time_sync_server_url: None,
+            private_enabled_default: false,
+            optimization_config: OptimizationConfig {
+                auto_enabled: true,
+                multiplicity: 5,
+            },
+            stable_balance_config: None,
+            max_concurrent_claims: 5,
+            support_lnurl_verify: false,
         };
 
         tracing::debug!("SDK config - network: Mainnet, sync_interval: 600s");
@@ -233,10 +244,22 @@ impl MintPayment for BreezBackend {
                     amount_sats
                 );
 
+                let expiry_secs = if let Some(expiry) = opts.unix_expiry {
+                    Some(
+                        expiry
+                            .checked_sub(unix_time())
+                            .ok_or(Error::AmountMismatch)? as u32,
+                    )
+                } else {
+                    None
+                };
+
                 let request = ReceivePaymentRequest {
                     payment_method: ReceivePaymentMethod::Bolt11Invoice {
                         description: description.clone(),
                         amount_sats,
+                        expiry_secs,
+                        payment_hash: None,
                     },
                 };
 
@@ -289,6 +312,8 @@ impl MintPayment for BreezBackend {
                     payment_request: bolt11_str.clone(),
                     amount: None,
                     token_identifier: None,
+                    conversion_options: None,
+                    fee_policy: None,
                 };
 
                 let prepare_response = self
@@ -352,6 +377,8 @@ impl MintPayment for BreezBackend {
                     payment_request: bolt11_str.clone(),
                     amount: None,
                     token_identifier: None,
+                    conversion_options: None,
+                    fee_policy: None,
                 };
 
                 let prepare_response = self
@@ -372,6 +399,7 @@ impl MintPayment for BreezBackend {
                 let send_request = SendPaymentRequest {
                     prepare_response,
                     options: None,
+                    idempotency_key: None,
                 };
 
                 let send_response = self.sdk.send_payment(send_request).await.map_err(|e| {
@@ -437,10 +465,11 @@ impl MintPayment for BreezBackend {
                 if let SdkEvent::PaymentSucceeded { payment } = event {
                     // Extract payment hash from payment details
                     let payment_identifier = if let Some(PaymentDetails::Lightning {
-                        ref payment_hash,
+                        ref htlc_details,
                         ..
                     }) = payment.details
                     {
+                        let payment_hash = &htlc_details.payment_hash;
                         // Convert hex string to bytes
                         if let Ok(hash_bytes) = hex::decode(payment_hash) {
                             if let Ok(hash_array) = hash_bytes.try_into() {
