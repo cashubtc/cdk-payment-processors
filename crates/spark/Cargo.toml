@@ -24,7 +24,7 @@ tonic = { version = "0.14", features = ["transport"] }
 tonic-reflection = "0.14"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-breez-sdk-spark = { git = "https://github.com/breez/spark-sdk", tag = "0.3.2" }
+breez-sdk-spark = { git = "https://github.com/breez/spark-sdk", tag = "0.10.0" }
 hex = "0.4"
 home = "0.5.12"
 lightning-invoice = "0.33.2"
