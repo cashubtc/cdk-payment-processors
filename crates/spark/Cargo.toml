@@ -10,8 +10,8 @@ license = "MIT"
 anyhow = "1"
 async-trait = "0.1"
 bytes = "1"
-cdk-common = { version = "0.15.0-rc.2", default-features = false, features = ["mint"] }
-cdk-payment-processor = { version = "0.15.0-rc.2", default-features = false }
+cdk-common = { version = "0.16.0-rc.1", default-features = false, features = ["mint"] }
+cdk-payment-processor = { version = "0.16.0-rc.1", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
 figment = { version = "0.10", features = ["env", "toml"] }
 futures-core = "0.3.31"

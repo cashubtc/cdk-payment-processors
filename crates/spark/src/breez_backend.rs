@@ -22,7 +22,7 @@ use cdk_common::payment::{
     PaymentQuoteResponse, SettingsResponse, WaitPaymentResponse,
 };
 use cdk_common::util::unix_time;
-use cdk_common::Bolt11Invoice;
+use cdk_common::{Amount, Bolt11Invoice};
 use futures_core::Stream;
 use tokio::sync::Mutex;
 
@@ -222,7 +222,6 @@ impl MintPayment for BreezBackend {
     /// Create an incoming payment request (invoice)
     async fn create_incoming_payment_request(
         &self,
-        _unit: &CurrencyUnit,
         options: IncomingPaymentOptions,
     ) -> Result<CreateIncomingPaymentResponse, Self::Err> {
         tracing::info!("Creating incoming payment request");
@@ -232,8 +231,8 @@ impl MintPayment for BreezBackend {
                     .description
                     .clone()
                     .unwrap_or_else(|| "Payment".to_string());
-                let amount_sats = if opts.amount > cdk_common::Amount::from(0) {
-                    Some(Into::<u64>::into(opts.amount))
+                let amount_sats = if opts.amount > Amount::new(0, CurrencyUnit::Sat) {
+                    Some(opts.amount.to_sat()?)
                 } else {
                     None
                 };
@@ -361,7 +360,7 @@ impl MintPayment for BreezBackend {
     /// Make an outgoing payment
     async fn make_payment(
         &self,
-        _unit: &CurrencyUnit,
+        unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<MakePaymentResponse, Self::Err> {
         match options {
@@ -390,12 +389,6 @@ impl MintPayment for BreezBackend {
                         cdk_common::payment::Error::Lightning(Box::new(e))
                     })?;
 
-                tracing::debug!(
-                    "Payment prepared - amount: {} sats",
-                    prepare_response.amount
-                );
-
-                // Now send the payment
                 let send_request = SendPaymentRequest {
                     prepare_response,
                     options: None,
@@ -416,7 +409,7 @@ impl MintPayment for BreezBackend {
                     payment_amount,
                     payment_fees,
                     total_spent,
-                    _unit.to_string(),
+                    unit.to_string(),
                     send_response.payment.id
                 );
 
@@ -432,7 +425,7 @@ impl MintPayment for BreezBackend {
                     payment_lookup_id: payment_identifier,
                     payment_proof: None,
                     status: MeltQuoteState::Paid,
-                    total_spent: total_spent.with_unit(CurrencyUnit::Sat),
+                    total_spent: total_spent.with_unit(unit.clone()),
                 })
             }
             _ => Err(cdk_common::payment::Error::UnsupportedPaymentOption),

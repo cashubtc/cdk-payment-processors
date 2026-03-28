@@ -596,9 +596,9 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cashu"
-version = "0.15.1"
+version = "0.16.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d612261d61069314bb0e39adbd63d0fd3bd22084f332e85c98e615c15f24e5a"
+checksum = "57a4a4ac5bcce2cfb6607d9c6e542cb7f56b3bdce2f270bf5ceba7ab86379503"
 dependencies = [
  "bitcoin",
  "cbor-diag",
@@ -613,6 +613,7 @@ dependencies = [
  "strum_macros",
  "thiserror 2.0.18",
  "tracing",
+ "unicode-normalization",
  "url",
  "uuid",
  "web-time",
@@ -661,9 +662,9 @@ dependencies = [
 
 [[package]]
 name = "cdk-common"
-version = "0.15.1"
+version = "0.16.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f5bf771d3780d2321211eb575e1f8341cec50f8a16c4f50b2787807b5090a38"
+checksum = "87f1aecce5d6c9939b251cdd5574a397abd8326faeaf373d99b1c5ffa45fa61f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -693,9 +694,9 @@ dependencies = [
 
 [[package]]
 name = "cdk-payment-processor"
-version = "0.15.1"
+version = "0.16.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "477f72bfd9d29429655b31c60159355a62d6a3a20f03c4a78d653ddca753c35c"
+checksum = "c13e03f8ae66a2e4d744aafc10503e4644a64910898fad43da7e13328fdfda37"
 dependencies = [
  "anyhow",
  "async-trait",
