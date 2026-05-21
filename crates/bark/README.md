@@ -589,10 +589,6 @@ A: This template is designed for a single backend per deployment. If you need mu
 - Extend the template to support backend selection at runtime
 - Implement a "multi-backend" that routes to different backends
 
-### Q: Does this support BOLT12?
-
-A: The gRPC protocol includes BOLT12 support, but implementation depends on your backend. Return `BackendError::Unsupported` if your backend doesn't support BOLT12.
-
 ### Q: How do I handle backend reconnections?
 
 A: Implement reconnection logic in your backend, especially in the `stream_incoming_payments` method. See the template comments for examples.
