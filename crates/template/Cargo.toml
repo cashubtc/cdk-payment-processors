@@ -10,10 +10,18 @@ license = "MIT"
 anyhow = "1"
 async-trait = "0.1"
 bytes = "1"
-cdk-common = { version = "0.15.0-rc.1", default-features = false, features = ["mint", "grpc"] }
-cdk-payment-processor = { version = "0.15.0-rc.1", default-features = false }
+cdk-common = { git = "https://github.com/thesimplekid/cdk", branch = "onchain_bdk", default-features = false, features = ["mint", "grpc"] }
+cdk-payment-processor = { git = "https://github.com/thesimplekid/cdk", branch = "onchain_bdk", default-features = false }
+ark-lib = "0.1.4"
+bark-wallet = "0.1.4"
+bip39 = "2.0"
+bitcoin = "0.32"
+hex = "0.4"
+uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 figment = { version = "0.10", features = ["env", "toml"] }
+futures = "0.3"
+lightning-invoice = "0.34"
 futures-core = "0.3.31"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

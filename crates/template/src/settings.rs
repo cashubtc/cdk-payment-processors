@@ -4,30 +4,54 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Backend-specific configuration
-///
-/// Add fields specific to your Lightning backend implementation here.
+/// Backend-specific configuration for Ark (Bark) wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BackendConfig {
-    // TODO: Add your backend-specific configuration fields here
-    // Examples for different backends:
-    // For Blink:
-    // pub api_url: Option<String>,
-    // pub api_key: Option<String>,
-    // pub wallet_id: Option<String>,
-    //
-    // For LND:
-    // pub host: Option<String>,
-    // pub macaroon_path: Option<String>,
-    // pub tls_cert_path: Option<String>,
-    //
-    // For Core Lightning:
-    // pub socket_path: Option<String>,
+    /// BIP39 mnemonic for wallet seed
+    pub mnemonic: String,
+
+    /// Ark server address
+    #[serde(default = "default_server_address")]
+    pub server_address: String,
+
+    /// Esplora API address
+    #[serde(default = "default_esplora_address")]
+    pub esplora_address: String,
+
+    /// Bitcoin network (signet, testnet, mainnet)
+    #[serde(default = "default_network")]
+    pub network: String,
+
+    /// Data directory for SQLite database
+    #[serde(default = "default_data_dir")]
+    pub data_dir: String,
+}
+
+fn default_server_address() -> String {
+    "https://ark.signet.2nd.dev".to_string()
+}
+
+fn default_esplora_address() -> String {
+    "https://esplora.signet.2nd.dev".to_string()
+}
+
+fn default_network() -> String {
+    "signet".to_string()
+}
+
+fn default_data_dir() -> String {
+    ".data/bark".to_string()
 }
 
 impl Default for BackendConfig {
     fn default() -> Self {
-        Self {}
+        Self {
+            mnemonic: String::new(),
+            server_address: default_server_address(),
+            esplora_address: default_esplora_address(),
+            network: default_network(),
+            data_dir: default_data_dir(),
+        }
     }
 }
 
@@ -37,7 +61,7 @@ impl Default for BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend type identifier (e.g., "blink", "lnd", "cln", "mock")
+    /// Backend type identifier (e.g., "ark")
     #[serde(default)]
     pub backend_type: String,
 
@@ -69,7 +93,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend_type: "mock".to_string(),
+            backend_type: "ark".to_string(),
             backend: BackendConfig::default(),
             server_port: 50051,
             tls_enable: false,
@@ -85,19 +109,6 @@ impl Default for Config {
 impl Config {
     /// Load from config.toml (if present) and environment variables.
     /// Environment variables override file values.
-    ///
-    /// # TODO
-    /// Add environment variable loading for your backend-specific configuration
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// if let Ok(v) = std::env::var("API_URL") {
-    ///     cfg.api_url = v;
-    /// }
-    /// if let Ok(v) = std::env::var("API_KEY") {
-    ///     cfg.api_key = v;
-    /// }
-    /// ```
     pub fn load() -> Self {
         // 1) Start with defaults + config.toml only if it exists
         let base: Config = Default::default();
@@ -108,8 +119,21 @@ impl Config {
         let mut cfg: Config = fig.extract().unwrap_or_default();
 
         // 2) Overlay environment variables explicitly
-        // TODO: Add your backend-specific environment variable loading here
-
+        if let Ok(v) = std::env::var("MNEMONIC") {
+            cfg.backend.mnemonic = v;
+        }
+        if let Ok(v) = std::env::var("ARK_SERVER_ADDRESS") {
+            cfg.backend.server_address = v;
+        }
+        if let Ok(v) = std::env::var("ESPLORA_ADDRESS") {
+            cfg.backend.esplora_address = v;
+        }
+        if let Ok(v) = std::env::var("NETWORK") {
+            cfg.backend.network = v;
+        }
+        if let Ok(v) = std::env::var("DATA_DIR") {
+            cfg.backend.data_dir = v;
+        }
         if let Ok(v) = std::env::var("SERVER_PORT") {
             cfg.server_port = v.parse().unwrap_or(cfg.server_port);
         }

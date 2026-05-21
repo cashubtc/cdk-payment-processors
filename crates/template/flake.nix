@@ -111,6 +111,7 @@
             sqlx-cli
             cargo-outdated
             mprocs
+            sqlite
 
             # Needed for github ci
             libz

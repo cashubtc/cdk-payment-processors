@@ -1,25 +1,26 @@
-# Example configuration for CDK Payment Processor Template
-# Copy to config.toml and edit values as needed
+# Configuration for CDK Ark Payment Processor
+# This payment processor uses the Bark wallet for Ark protocol payments
 
-# Backend type: mock, blink, lnd, cln, etc.
-backend_type = "mock"
+# Backend type: ark
+backend_type = "ark"
 
-# Backend-specific configuration (examples below)
+# Ark (Bark) backend configuration
 [backend]
-# For mock backend, no additional configuration is needed
+# BIP39 mnemonic - REQUIRED
+# Generate with: cargo install bip39-cli && bip39 generate 12
+mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-# For Blink backend (uncomment and configure):
-# api_url = "https://api.blink.sv/graphql"
-# api_key = "your-api-key-here"
-# wallet_id = ""  # Optional; if empty, default wallet is used
+# Ark server address (default: Second's signet server)
+server_address = "https://ark.signet.2nd.dev"
 
-# For LND backend (uncomment and configure):
-# host = "localhost:10009"
-# macaroon_path = "/path/to/admin.macaroon"
-# tls_cert_path = "/path/to/tls.cert"
+# Esplora API address for on-chain data
+esplora_address = "https://esplora.signet.2nd.dev"
 
-# For Core Lightning backend (uncomment and configure):
-# socket_path = "/path/to/lightning-rpc"
+# Bitcoin network: signet, testnet, mainnet
+network = "signet"
+
+# Data directory for SQLite database
+data_dir = ".data/bark"
 
 # gRPC server configuration
 server_port = 50051
