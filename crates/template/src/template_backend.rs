@@ -19,9 +19,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use cdk_common::nuts::CurrencyUnit;
 use cdk_common::payment::{
-    Bolt11Settings, CreateIncomingPaymentResponse, Event, IncomingPaymentOptions, MakePaymentResponse,
-    MintPayment, OutgoingPaymentOptions, PaymentIdentifier, PaymentQuoteResponse, SettingsResponse,
-    WaitPaymentResponse,
+    Bolt11Settings, CreateIncomingPaymentResponse, Event, IncomingPaymentOptions,
+    MakePaymentResponse, MintPayment, OutgoingPaymentOptions, PaymentIdentifier,
+    PaymentQuoteResponse, SettingsResponse, WaitPaymentResponse,
 };
 use futures_core::Stream;
 
@@ -46,7 +46,7 @@ pub struct TemplateBackend {
     // node_url: String,
     // macaroon: Vec<u8>,
     // cert: Vec<u8>,
-    wait_invoice_active: Arc<AtomicBool>,
+    payment_event_stream_active: Arc<AtomicBool>,
 }
 
 impl TemplateBackend {
@@ -73,7 +73,7 @@ impl TemplateBackend {
     ///         client,
     ///         api_url,
     ///         api_key,
-    ///         wait_invoice_active: Arc::new(AtomicBool::new(false)),
+    ///         payment_event_stream_active: Arc::new(AtomicBool::new(false)),
     ///     })
     /// }
     /// ```
@@ -87,7 +87,7 @@ impl TemplateBackend {
 impl Default for TemplateBackend {
     fn default() -> Self {
         Self {
-            wait_invoice_active: Arc::new(AtomicBool::new(false)),
+            payment_event_stream_active: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -115,6 +115,7 @@ impl MintPayment for TemplateBackend {
                 invoice_description: true,
             }),
             bolt12: None,
+            onchain: None,
             custom: std::collections::HashMap::new(),
         })
     }
@@ -122,7 +123,6 @@ impl MintPayment for TemplateBackend {
     /// Create an incoming payment request (invoice)
     async fn create_incoming_payment_request(
         &self,
-        _unit: &CurrencyUnit,
         _options: IncomingPaymentOptions,
     ) -> Result<CreateIncomingPaymentResponse, Self::Err> {
         // TODO: Implement invoice creation for your backend
@@ -189,8 +189,10 @@ impl MintPayment for TemplateBackend {
         //         request_lookup_id: None,
         //         amount: Amount::from_msat(amount),
         //         fee: Amount::from_msat(fee_msat),
-        //         unit: unit.clone(),
         //         state: MeltQuoteState::Unpaid,
+        //         extra_json: None,
+        //         estimated_blocks: None,
+        //         fee_options: None,
         //     })
         // } else {
         //     Err(cdk_common::payment::Error::UnsupportedPaymentOption)
@@ -218,7 +220,6 @@ impl MintPayment for TemplateBackend {
         //         payment_proof: Some(data.preimage),
         //         status: MeltQuoteState::Paid,
         //         total_spent: Amount::from_sat(data.amount_sent + data.fee),
-        //         unit: unit.clone(),
         //     })
         // } else {
         //     Err(cdk_common::payment::Error::UnsupportedPaymentOption)
@@ -243,7 +244,7 @@ impl MintPayment for TemplateBackend {
         // 4. Polling (fallback)
         //
         // Example using channel + background task:
-        // self.wait_invoice_active.store(true, Ordering::Relaxed);
+        // self.payment_event_stream_active.store(true, Ordering::Relaxed);
         //
         // let (tx, rx) = mpsc::channel(100);
         // // TODO: Spawn background task to poll/stream payments
@@ -251,8 +252,7 @@ impl MintPayment for TemplateBackend {
         // // tx.send(Event::PaymentReceived(WaitPaymentResponse {
         // //     payment_identifier: PaymentIdentifier::PaymentHash(hash),
         // //     payment_amount: Amount::from_sat(amount),
-        // //     payment_preimage: Some(preimage),
-        // //     unit: CurrencyUnit::Sat,
+        // //     payment_id: data.payment_hash,
         // // })).await;
         //
         // Ok(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)))
@@ -260,14 +260,15 @@ impl MintPayment for TemplateBackend {
         todo!("Implement wait_payment_event")
     }
 
-    /// Check if wait invoice is currently active
-    fn is_wait_invoice_active(&self) -> bool {
-        self.wait_invoice_active.load(Ordering::Relaxed)
+    /// Check if the payment event stream is currently active
+    fn is_payment_event_stream_active(&self) -> bool {
+        self.payment_event_stream_active.load(Ordering::Relaxed)
     }
 
-    /// Cancel waiting for invoice payments
-    fn cancel_wait_invoice(&self) {
-        self.wait_invoice_active.store(false, Ordering::Relaxed);
+    /// Cancel the payment event stream
+    fn cancel_payment_event_stream(&self) {
+        self.payment_event_stream_active
+            .store(false, Ordering::Relaxed);
     }
 
     /// Check the status of an incoming payment
@@ -285,8 +286,7 @@ impl MintPayment for TemplateBackend {
         //     Ok(vec![WaitPaymentResponse {
         //         payment_identifier: payment_identifier.clone(),
         //         payment_amount: Amount::from_sat(data.amount),
-        //         payment_preimage: data.preimage,
-        //         unit: CurrencyUnit::Sat,
+        //         payment_id: data.payment_hash,
         //     }])
         // } else {
         //     Ok(vec![])
@@ -309,7 +309,6 @@ impl MintPayment for TemplateBackend {
         //     payment_proof: data.preimage,
         //     status: if data.is_paid { MeltQuoteState::Paid } else { MeltQuoteState::Pending },
         //     total_spent: Amount::from_sat(data.total_amount),
-        //     unit: CurrencyUnit::Sat,
         // })
 
         todo!("Implement check_outgoing_payment")

@@ -68,15 +68,14 @@ The `MintPayment` trait (from the `cdk-common` crate) defines the interface your
 ```rust
 #[async_trait]
 pub trait MintPayment: Send + Sync {
-    type Err: std::error::Error + Send + Sync + 'static;
+    type Err: Into<cdk_common::payment::Error> + From<cdk_common::payment::Error>;
 
     // Get backend capabilities and settings
-    async fn get_settings(&self) -> Result<serde_json::Value, Self::Err>;
+    async fn get_settings(&self) -> Result<SettingsResponse, Self::Err>;
     
     // Create an incoming payment request (invoice)
     async fn create_incoming_payment_request(
         &self,
-        unit: &CurrencyUnit,
         options: IncomingPaymentOptions,
     ) -> Result<CreateIncomingPaymentResponse, Self::Err>;
     
@@ -99,11 +98,11 @@ pub trait MintPayment: Send + Sync {
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Event> + Send>>, Self::Err>;
     
-    // Check if wait invoice is active
-    fn is_wait_invoice_active(&self) -> bool;
+    // Check if the payment event stream is active
+    fn is_payment_event_stream_active(&self) -> bool;
     
-    // Cancel waiting for invoices
-    fn cancel_wait_invoice(&self);
+    // Cancel the payment event stream
+    fn cancel_payment_event_stream(&self);
     
     // Check incoming payment status
     async fn check_incoming_payment_status(

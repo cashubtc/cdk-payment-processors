@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Add fields specific to your Lightning backend implementation here.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Default)]
 pub struct BackendConfig {
     // TODO: Add your backend-specific configuration fields here
     // Examples for different backends:
@@ -25,11 +26,6 @@ pub struct BackendConfig {
     // pub socket_path: Option<String>,
 }
 
-impl Default for BackendConfig {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 /// Main configuration structure
 ///
