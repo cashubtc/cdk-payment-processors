@@ -1,7 +1,7 @@
-mod ark_backend;
 mod settings;
+mod template_backend;
 
-use crate::ark_backend::ArkBackend;
+use crate::template_backend::TemplateBackend;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
@@ -17,16 +17,18 @@ async fn main() -> Result<()> {
     // Load configuration from environment
     let cfg = settings::Config::from_env();
 
-    // Initialize the Ark backend
-    tracing::info!("Initializing Ark payment processor");
-    let backend = Arc::new(ArkBackend::new(&cfg.backend).await?);
+    // TODO: Initialize your Lightning backend here
+    // For now, we use the template backend which will panic with todo!() on any method call
+    let backend = Arc::new(TemplateBackend::new()?);
 
-    let bind_addr = "0.0.0.0";
-    let server_addr = format!("{}:{}", bind_addr, cfg.server_port);
+    // Optional: Test the connection
+    // backend.test_connection().await?;
+
+    let server_addr = format!("0.0.0.0:{}", cfg.server_port);
     tracing::info!("Starting CDK Payment Processor server on {}", server_addr);
 
     let mut server =
-        cdk_payment_processor::PaymentProcessorServer::new(backend, bind_addr, cfg.server_port)?;
+        cdk_payment_processor::PaymentProcessorServer::new(backend, &server_addr, cfg.server_port)?;
 
     server.start(None).await?;
 
