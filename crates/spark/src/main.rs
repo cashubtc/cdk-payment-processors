@@ -1,8 +1,8 @@
-mod breez_backend;
+mod backend;
 mod database;
 mod settings;
 
-use crate::breez_backend::BreezBackend;
+use crate::backend::BreezBackend;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
