@@ -578,8 +578,9 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "cashu"
-version = "0.16.0"
-source = "git+https://github.com/thesimplekid/cdk?branch=onchain_bdk#ea8f84e51e09c59e6422d5f727ec1320e28efbfd"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92e035322b7e279fc37a110e5fffdcf987fa5414caea1d0576cedb3b3611cbbb"
 dependencies = [
  "bitcoin",
  "cbor-diag",
@@ -643,8 +644,9 @@ dependencies = [
 
 [[package]]
 name = "cdk-common"
-version = "0.16.0"
-source = "git+https://github.com/thesimplekid/cdk?branch=onchain_bdk#ea8f84e51e09c59e6422d5f727ec1320e28efbfd"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cb4f7239c3ed8ce35d8928324cf73147c802eb4f7cc42ef71827954cda96ac3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -676,8 +678,9 @@ dependencies = [
 
 [[package]]
 name = "cdk-http-client"
-version = "0.16.0"
-source = "git+https://github.com/thesimplekid/cdk?branch=onchain_bdk#ea8f84e51e09c59e6422d5f727ec1320e28efbfd"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6089ad04be877f3642729ab01a97b62e90a1ebafaac19583444fd72ffb2d25f"
 dependencies = [
  "futures",
  "futures-channel",
@@ -697,8 +700,9 @@ dependencies = [
 
 [[package]]
 name = "cdk-payment-processor"
-version = "0.16.0"
-source = "git+https://github.com/thesimplekid/cdk?branch=onchain_bdk#ea8f84e51e09c59e6422d5f727ec1320e28efbfd"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4d26e809e8b9a28aa99f5d08e4802d94509fcb6e82081c6aea980e49975454f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -727,7 +731,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cdk-payment-processor-template"
+name = "cdk-payment-processor-bark"
 version = "0.0.1"
 dependencies = [
  "anyhow",

@@ -15,7 +15,7 @@ use bark::persist::sqlite::SqliteClient;
 use bark::persist::BarkPersister;
 use bitcoin::{Address, FeeRate, OutPoint, Psbt, Transaction, Txid};
 use cdk_common::amount::Amount;
-use cdk_common::nuts::nut_onchain::MeltQuoteOnchainFeeOption;
+use cdk_common::nuts::nut30::MeltQuoteOnchainFeeOption;
 use cdk_common::nuts::CurrencyUnit;
 use cdk_common::payment::{
     Bolt11Settings, CreateIncomingPaymentResponse, Event, IncomingPaymentOptions,
@@ -1655,7 +1655,7 @@ impl MintPayment for ArkBackend {
         // Extract payment hash from the invoice - bark returns lightning_invoice::Bolt11Invoice
         let payment_hash_bytes: [u8; 32] = *invoice.payment_hash().as_ref();
         let payment_hash_hex = hex::encode(payment_hash_bytes);
-        let quote_id = QuoteId::new_uuid();
+        let quote_id = QuoteId::new();
         self.state_store
             .put_lightning_receive_quote(&quote_id.to_string(), &payment_hash_hex)?;
 
