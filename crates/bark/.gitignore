@@ -5,3 +5,4 @@
 *.crt
 .pre-commit-config.yaml
 .data
+config.toml
