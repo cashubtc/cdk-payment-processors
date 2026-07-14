@@ -1,7 +1,7 @@
 mod backend;
 mod settings;
 
-use crate::backend::ArkBackend;
+use crate::backend::BarkBackend;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
@@ -17,9 +17,9 @@ async fn main() -> Result<()> {
     // Load configuration from environment
     let cfg = settings::Config::from_env();
 
-    // Initialize the Ark backend
-    tracing::info!("Initializing Ark payment processor");
-    let backend = Arc::new(ArkBackend::new(&cfg.backend).await?);
+    // Initialize the Bark backend
+    tracing::info!("Initializing Bark payment processor");
+    let backend = Arc::new(BarkBackend::new(&cfg.backend).await?);
 
     let bind_addr = "0.0.0.0";
     let server_addr = format!("{}:{}", bind_addr, cfg.server_port);

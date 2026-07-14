@@ -34,14 +34,14 @@ const ONCHAIN_CONFIRMATIONS: u32 = 1;
 const ONCHAIN_FEE_INDEX: u32 = 0;
 const ONCHAIN_ESTIMATED_BLOCKS: u32 = 6;
 
-/// Ark payment processor backend using the Bark wallet library
+/// Bark payment processor backend using the Bark wallet library
 #[derive(Clone)]
-pub struct ArkBackend {
+pub struct BarkBackend {
     wallet: Arc<bark::Wallet>,
     onchain_wallet: Arc<tokio::sync::Mutex<OnchainWallet>>,
     onchain_send_lock: Arc<tokio::sync::Mutex<()>>,
     lightning_send_lock: Arc<tokio::sync::Mutex<()>>,
-    state_store: Arc<ArkStateStore>,
+    state_store: Arc<BarkStateStore>,
     network: bitcoin::Network,
     wait_invoice_active: Arc<AtomicBool>,
 }
@@ -183,11 +183,11 @@ enum LightningSendIntentState {
     },
 }
 
-struct ArkStateStore {
+struct BarkStateStore {
     db: Database,
 }
 
-impl ArkStateStore {
+impl BarkStateStore {
     fn open(path: PathBuf) -> anyhow::Result<Self> {
         let db = Database::create(path)?;
         let store = Self { db };
@@ -630,10 +630,10 @@ impl GetWalletTx for ScopedBoard<'_> {
     }
 }
 
-impl ArkBackend {
-    /// Create a new Ark backend with initialized wallet
+impl BarkBackend {
+    /// Create a new Bark backend with initialized wallet
     pub async fn new(config: &BackendConfig) -> anyhow::Result<Self> {
-        info!("Initializing Ark backend");
+        info!("Initializing Bark backend");
 
         // Parse the mnemonic
         let mnemonic = config
@@ -687,11 +687,11 @@ impl ArkBackend {
         .await
         {
             Ok(wallet) => {
-                info!("Opened existing Ark wallet");
+                info!("Opened existing Bark wallet");
                 wallet
             }
             Err(e) => {
-                info!("Creating new Ark wallet (open failed: {})", e);
+                info!("Creating new Bark wallet (open failed: {})", e);
                 bark::Wallet::create_with_onchain(
                     &mnemonic,
                     network,
@@ -711,11 +711,11 @@ impl ArkBackend {
             .map_err(|e| anyhow::anyhow!("Failed to sync onchain wallet: {}", e))?;
 
         let state_store = Arc::new(
-            ArkStateStore::open(data_dir.join("onchain_state.redb"))
+            BarkStateStore::open(data_dir.join("onchain_state.redb"))
                 .map_err(|e| anyhow::anyhow!("Failed to open onchain state store: {}", e))?,
         );
 
-        info!("Ark backend initialized successfully");
+        info!("Bark backend initialized successfully");
 
         Ok(Self {
             wallet: Arc::new(wallet),
@@ -1562,11 +1562,11 @@ impl ArkBackend {
 }
 
 #[async_trait]
-impl MintPayment for ArkBackend {
+impl MintPayment for BarkBackend {
     type Err = cdk_common::payment::Error;
 
     async fn get_settings(&self) -> Result<SettingsResponse, Self::Err> {
-        debug!("Getting Ark wallet settings");
+        debug!("Getting Bark wallet settings");
         Ok(SettingsResponse {
             unit: "sat".to_string(),
             bolt11: Some(Bolt11Settings {

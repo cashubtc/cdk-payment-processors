@@ -1,16 +1,20 @@
-# Configuration for CDK Ark Payment Processor
-# This payment processor uses the Bark wallet for Ark protocol payments
+backend_type = "bark"
 
-# Backend type: ark
-backend_type = "ark"
+# gRPC server configuration
+server_port = 50051
 
-# Ark (Bark) backend configuration
+# TLS configuration (optional)
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+
+# Bark backend configuration
 [backend]
 # BIP39 mnemonic - REQUIRED
 # Generate with: cargo install bip39-cli && bip39 generate 12
 mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-# Ark server address (default: Second's signet server)
+# Bark server address (default: Second's signet server)
 server_address = "https://ark.signet.2nd.dev"
 
 # Esplora API address for on-chain data
@@ -21,14 +25,6 @@ network = "signet"
 
 # Data directory for SQLite database
 data_dir = ".data/bark"
-
-# gRPC server configuration
-server_port = 50051
-
-# TLS configuration (optional)
-tls_enable = false
-tls_cert_path = "certs/server.crt"
-tls_key_path = "certs/server.key"
 
 # HTTP/2 keep-alive settings (optional)
 # keep_alive_interval = "30s"

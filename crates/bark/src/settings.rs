@@ -4,13 +4,13 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Backend-specific configuration for Ark (Bark) wallet
+/// Backend-specific configuration for Bark wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BackendConfig {
     /// BIP39 mnemonic for wallet seed
     pub mnemonic: String,
 
-    /// Ark server address
+    /// Bark server address
     #[serde(default = "default_server_address")]
     pub server_address: String,
 
@@ -61,7 +61,7 @@ impl Default for BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend type identifier (e.g., "ark")
+    /// Backend type identifier (e.g., "bark")
     #[serde(default)]
     pub backend_type: String,
 
@@ -93,7 +93,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend_type: "ark".to_string(),
+            backend_type: "bark".to_string(),
             backend: BackendConfig::default(),
             server_port: 50051,
             tls_enable: false,
