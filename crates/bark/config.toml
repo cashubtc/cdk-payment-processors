@@ -15,14 +15,14 @@ tls_key_path = "certs/server.key"
 # Generate with: cargo install bip39-cli && bip39 generate 12
 mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 
-# Bark server address (default: Second's signet server)
-server_address = "https://ark.signet.2nd.dev"
+# Bark server address (default: Second's server)
+server_address = "https://ark.second.tech"
 
 # Esplora API address for on-chain data
-esplora_address = "https://esplora.signet.2nd.dev"
+esplora_address = "https://mempool.second.tech/api"
 
 # Bitcoin network: signet, testnet, mainnet
-network = "signet"
+network = "mainnet"
 
 # Data directory for SQLite database
 data_dir = ".data/bark"

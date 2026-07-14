@@ -28,15 +28,15 @@ pub struct BackendConfig {
 }
 
 fn default_server_address() -> String {
-    "https://ark.signet.2nd.dev".to_string()
+    "https://ark.second.tech".to_string()
 }
 
 fn default_esplora_address() -> String {
-    "https://esplora.signet.2nd.dev".to_string()
+    "https://mempool.second.tech/api".to_string()
 }
 
 fn default_network() -> String {
-    "signet".to_string()
+    "mainnet".to_string()
 }
 
 fn default_data_dir() -> String {
