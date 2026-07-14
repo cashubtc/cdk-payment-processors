@@ -21,12 +21,17 @@ async fn main() -> Result<()> {
     tracing::info!("Initializing Bark payment processor");
     let backend = Arc::new(BarkBackend::new(&cfg.backend).await?);
 
-    let bind_addr = "0.0.0.0";
-    let server_addr = format!("{}:{}", bind_addr, cfg.server_port);
-    tracing::info!("Starting CDK Payment Processor server on {}", server_addr);
+    tracing::info!(
+        "Starting CDK Payment Processor server on {}:{}",
+        cfg.address,
+        cfg.port
+    );
 
-    let mut server =
-        cdk_payment_processor::PaymentProcessorServer::new(backend, bind_addr, cfg.server_port)?;
+    let mut server = cdk_payment_processor::PaymentProcessorServer::new(
+        backend,
+        cfg.address.as_str(),
+        cfg.port,
+    )?;
 
     server.start(None).await?;
 

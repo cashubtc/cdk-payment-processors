@@ -69,8 +69,13 @@ pub struct Config {
     #[serde(default)]
     pub backend: BackendConfig,
 
+    /// gRPC server address
+    #[serde(default = "default_address")]
+    pub address: String,
+
     /// gRPC server port
-    pub server_port: u16,
+    #[serde(default = "default_port")]
+    pub port: u16,
 
     /// TLS config for gRPC server
     pub tls_enable: bool,
@@ -90,12 +95,21 @@ pub struct Config {
     pub max_connection_age: Option<String>,
 }
 
+fn default_address() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_port() -> u16 {
+    50051
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             backend_type: "bark".to_string(),
             backend: BackendConfig::default(),
-            server_port: 50051,
+            address: default_address(),
+            port: default_port(),
             tls_enable: false,
             tls_cert_path: "certs/server.crt".to_string(),
             tls_key_path: "certs/server.key".to_string(),
@@ -119,23 +133,28 @@ impl Config {
         let mut cfg: Config = fig.extract().unwrap_or_default();
 
         // 2) Overlay environment variables explicitly
-        if let Ok(v) = std::env::var("MNEMONIC") {
+        if let Ok(v) = std::env::var("BARK_MNEMONIC") {
             cfg.backend.mnemonic = v;
         }
-        if let Ok(v) = std::env::var("ARK_SERVER_ADDRESS") {
+        if let Ok(v) = std::env::var("BARK_SERVER_ADDRESS") {
             cfg.backend.server_address = v;
         }
-        if let Ok(v) = std::env::var("ESPLORA_ADDRESS") {
+        if let Ok(v) = std::env::var("BARK_ESPLORA_ADDRESS") {
             cfg.backend.esplora_address = v;
         }
-        if let Ok(v) = std::env::var("NETWORK") {
+        if let Ok(v) = std::env::var("BARK_NETWORK") {
             cfg.backend.network = v;
         }
-        if let Ok(v) = std::env::var("DATA_DIR") {
+        if let Ok(v) = std::env::var("BARK_DATA_DIR") {
             cfg.backend.data_dir = v;
         }
+
+        // Server configuration
+        if let Ok(v) = std::env::var("SERVER_ADDRESS") {
+            cfg.address = v;
+        }
         if let Ok(v) = std::env::var("SERVER_PORT") {
-            cfg.server_port = v.parse().unwrap_or(cfg.server_port);
+            cfg.port = v.parse().unwrap_or(cfg.port);
         }
         if let Ok(v) = std::env::var("TLS_ENABLE") {
             cfg.tls_enable = matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES");
