@@ -4,7 +4,7 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Backend-specific configuration for Spark wallet
+/// Backend-specific configuration for Breez SDK Spark wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BackendConfig {
     /// Breez API key (required)
@@ -150,6 +150,8 @@ impl Config {
             tracing::debug!("WORKING_DIR loaded from environment: {}", v);
             cfg.backend.working_dir = v;
         }
+
+        // Server configuration
         if let Ok(v) = std::env::var("SERVER_ADDRESS") {
             cfg.address = v;
         }

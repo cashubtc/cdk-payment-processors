@@ -2,7 +2,7 @@ mod backend;
 mod database;
 mod settings;
 
-use crate::backend::BreezBackend;
+use crate::backend::SparkBackend;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
@@ -18,8 +18,9 @@ async fn main() -> Result<()> {
     // Load configuration from environment
     let cfg = settings::Config::from_env();
 
-    // Initialize Breez SDK backend
-    let backend = Arc::new(BreezBackend::new(cfg.backend).await?);
+    // Initialize the Breez SDK Spark backend
+    tracing::info!("Initializing Breez SDK Spark payment processor");
+    let backend = Arc::new(SparkBackend::new(cfg.backend).await?);
 
     tracing::info!(
         "Starting CDK Payment Processor server on {}:{}",
@@ -43,7 +44,7 @@ async fn main() -> Result<()> {
 
     // Disconnect from Breez SDK before stopping server
     if let Err(e) = backend.disconnect().await {
-        tracing::error!("Error disconnecting from Breez SDK: {}", e);
+        tracing::error!("Error disconnecting from Breez SDK Spark: {}", e);
     }
 
     server.stop().await?;

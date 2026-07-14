@@ -3,15 +3,15 @@ name = "cdk-payment-processor-spark"
 version = "0.0.1"
 edition = "2021"
 authors = ["thesimplekid <tsk@thesimplekid.com>"]
-description = "CDK Payment Processor using Breez SDK Spark"
+description = "CDK Payment Processor for Spark (using Breez SDK)"
 license = "MIT"
 
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
 bytes = "1"
-cdk-common = { version = "0.16.0-rc.1", default-features = false, features = ["mint"] }
-cdk-payment-processor = { version = "0.16.0-rc.1", default-features = false }
+cdk-common = { version = "0.17.3", default-features = false, features = ["mint", "grpc"] }
+cdk-payment-processor = { version = "0.17.3", default-features = false }
 chrono = { version = "0.4", features = ["serde"] }
 figment = { version = "0.10", features = ["env", "toml"] }
 futures-core = "0.3.31"
@@ -21,17 +21,16 @@ thiserror = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal", "test-util"] }
 tokio-stream = "0.1"
 tonic = { version = "0.14", features = ["transport"] }
-tonic-reflection = "0.14"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
 breez-sdk-spark = { git = "https://github.com/breez/spark-sdk", tag = "0.12.1" }
 hex = "0.4"
 home = "0.5.12"
-lightning-invoice = "0.33.2"
 redb = "3.1.0"
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.14"
 
 [features]
 default = []

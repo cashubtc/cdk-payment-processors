@@ -1,8 +1,3 @@
-//! Breez SDK Spark Lightning Backend Implementation
-//!
-//! This implementation uses the Breez SDK Spark to provide Lightning payment functionality
-//! for the CDK payment processor.
-
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::str::FromStr;
@@ -30,7 +25,7 @@ use crate::database::QuoteDatabase;
 use crate::settings::BackendConfig;
 
 /// Breez SDK Spark backend implementation
-pub struct BreezBackend {
+pub struct SparkBackend {
     /// The Breez SDK instance
     sdk: Arc<BreezSdk>,
     /// Flag to track if we're actively waiting for invoice payments
@@ -41,7 +36,7 @@ pub struct BreezBackend {
     listener_ids: Arc<Mutex<Vec<String>>>,
 }
 
-impl BreezBackend {
+impl SparkBackend {
     /// Store a mint quote mapping (payment hash -> payment request)
     fn store_mint_quote(
         &self,
@@ -201,7 +196,7 @@ impl BreezBackend {
 }
 
 #[async_trait]
-impl MintPayment for BreezBackend {
+impl MintPayment for SparkBackend {
     type Err = cdk_common::payment::Error;
 
     /// Get backend settings - returns capabilities and supported features
@@ -215,6 +210,7 @@ impl MintPayment for BreezBackend {
                 invoice_description: false,
             }),
             bolt12: None,
+            onchain: None,
             custom: HashMap::new(),
         })
     }
@@ -351,6 +347,9 @@ impl MintPayment for BreezBackend {
                     amount: amount.with_unit(unit.clone()),
                     fee: fee.with_unit(unit.clone()),
                     state: MeltQuoteState::Unpaid,
+                    extra_json: None,
+                    estimated_blocks: None,
+                    fee_options: None,
                 })
             }
             _ => Err(cdk_common::payment::Error::UnsupportedPaymentOption),
@@ -517,13 +516,13 @@ impl MintPayment for BreezBackend {
         Ok(Box::pin(ReceiverStream::new(rx)))
     }
 
-    /// Check if wait invoice is currently active
-    fn is_wait_invoice_active(&self) -> bool {
+    /// Check if the payment event stream is currently active
+    fn is_payment_event_stream_active(&self) -> bool {
         self.wait_invoice_active.load(Ordering::Relaxed)
     }
 
-    /// Cancel waiting for invoice payments
-    fn cancel_wait_invoice(&self) {
+    /// Cancel the payment event stream
+    fn cancel_payment_event_stream(&self) {
         self.wait_invoice_active.store(false, Ordering::Relaxed);
     }
 
