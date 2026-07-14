@@ -4,9 +4,7 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Backend-specific configuration
-///
-/// Configuration for Breez SDK Spark
+/// Backend-specific configuration for Spark wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BackendConfig {
     /// Breez API key (required)
@@ -47,10 +45,6 @@ fn default_working_dir() -> String {
     }
 }
 
-fn default_server_addr() -> String {
-    "127.0.0.1".to_string()
-}
-
 impl Default for BackendConfig {
     fn default() -> Self {
         Self {
@@ -68,16 +62,21 @@ impl Default for BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
+    /// Backend type identifier (e.g., "spark")
+    #[serde(default)]
+    pub backend_type: String,
+
     /// Backend-specific configuration
     #[serde(default)]
     pub backend: BackendConfig,
 
-    /// gRPC server bind address
-    #[serde(default = "default_server_addr")]
-    pub server_addr: String,
+    /// gRPC server address
+    #[serde(default = "default_address")]
+    pub address: String,
 
     /// gRPC server port
-    pub server_port: u16,
+    #[serde(default = "default_port")]
+    pub port: u16,
 
     /// TLS config for gRPC server
     pub tls_enable: bool,
@@ -85,12 +84,21 @@ pub struct Config {
     pub tls_key_path: String,
 }
 
+fn default_address() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_port() -> u16 {
+    50051
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
+            backend_type: "spark".to_string(),
             backend: BackendConfig::default(),
-            server_addr: default_server_addr(),
-            server_port: 50051,
+            address: default_address(),
+            port: default_port(),
             tls_enable: false,
             tls_cert_path: "certs/server.crt".to_string(),
             tls_key_path: "certs/server.key".to_string(),
@@ -123,12 +131,6 @@ impl Config {
 
         let mut cfg: Config = fig.extract().unwrap_or_default();
 
-        tracing::debug!(
-            "Initial config loaded - server_port: {}, tls_enable: {}",
-            cfg.server_port,
-            cfg.tls_enable
-        );
-
         // 2) Overlay environment variables explicitly
         // Breez-specific environment variables
         if let Ok(v) = std::env::var("BREEZ_API_KEY") {
@@ -148,19 +150,14 @@ impl Config {
             tracing::debug!("WORKING_DIR loaded from environment: {}", v);
             cfg.backend.working_dir = v;
         }
-
-        // Server configuration
-        if let Ok(v) = std::env::var("SERVER_ADDR") {
-            cfg.server_addr = v;
-            tracing::debug!("SERVER_ADDR loaded from environment: {}", cfg.server_addr);
+        if let Ok(v) = std::env::var("SERVER_ADDRESS") {
+            cfg.address = v;
         }
         if let Ok(v) = std::env::var("SERVER_PORT") {
-            cfg.server_port = v.parse().unwrap_or(cfg.server_port);
-            tracing::debug!("SERVER_PORT loaded from environment: {}", cfg.server_port);
+            cfg.port = v.parse().unwrap_or(cfg.port);
         }
         if let Ok(v) = std::env::var("TLS_ENABLE") {
             cfg.tls_enable = matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES");
-            tracing::debug!("TLS_ENABLE loaded from environment: {}", cfg.tls_enable);
         }
         if let Ok(v) = std::env::var("TLS_CERT_PATH") {
             cfg.tls_cert_path = v;
@@ -168,19 +165,6 @@ impl Config {
         if let Ok(v) = std::env::var("TLS_KEY_PATH") {
             cfg.tls_key_path = v;
         }
-
-        // Log final configuration summary (without sensitive data)
-        tracing::info!(
-            "Configuration loaded - working_dir: {}, server: {}:{}",
-            cfg.backend.working_dir,
-            cfg.server_addr,
-            cfg.server_port
-        );
-        tracing::debug!(
-            "API key present: {}, Mnemonic present: {}",
-            !cfg.backend.api_key.is_empty(),
-            !cfg.backend.mnemonic.is_empty()
-        );
 
         cfg
     }

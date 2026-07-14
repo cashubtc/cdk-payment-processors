@@ -23,14 +23,14 @@ async fn main() -> Result<()> {
 
     tracing::info!(
         "Starting CDK Payment Processor server on {}:{}",
-        cfg.server_addr,
-        cfg.server_port
+        cfg.address,
+        cfg.port
     );
 
     let mut server = cdk_payment_processor::PaymentProcessorServer::new(
         backend.clone(),
-        &cfg.server_addr,
-        cfg.server_port,
+        cfg.address.as_str(),
+        cfg.port,
     )?;
 
     server.start(None).await?;

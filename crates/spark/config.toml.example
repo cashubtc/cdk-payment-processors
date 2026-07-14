@@ -1,14 +1,17 @@
-# CDK Payment Processor - Breez SDK Spark Configuration Example
 # Copy this file to config.toml and fill in your values
 
-server_addr = "127.0.0.1"
-server_port = 50051
+backend_type = "spark"
 
-# TLS Configuration (optional)
+# gRPC server configuration
+address = "127.0.0.1"
+port = 50051
+
+# TLS configuration (optional)
 tls_enable = false
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
 
+# Spark backend configuration
 [backend]
 # Breez API key - Get one from https://breez.technology/request-api-key/#contact-us-form-sdk
 api_key = "your-api-key-here"
