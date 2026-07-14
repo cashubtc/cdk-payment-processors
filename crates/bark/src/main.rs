@@ -1,7 +1,7 @@
-mod ark_backend;
+mod backend;
 mod settings;
 
-use crate::ark_backend::ArkBackend;
+use crate::backend::ArkBackend;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
