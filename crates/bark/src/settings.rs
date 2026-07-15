@@ -81,18 +81,6 @@ pub struct Config {
     pub tls_enable: bool,
     pub tls_cert_path: String,
     pub tls_key_path: String,
-
-    /// HTTP/2 keep-alive interval (e.g., "30s")
-    #[serde(default)]
-    pub keep_alive_interval: Option<String>,
-
-    /// HTTP/2 keep-alive timeout (e.g., "10s")
-    #[serde(default)]
-    pub keep_alive_timeout: Option<String>,
-
-    /// Maximum connection age (e.g., "30m")
-    #[serde(default)]
-    pub max_connection_age: Option<String>,
 }
 
 fn default_address() -> String {
@@ -113,9 +101,6 @@ impl Default for Config {
             tls_enable: false,
             tls_cert_path: "certs/server.crt".to_string(),
             tls_key_path: "certs/server.key".to_string(),
-            keep_alive_interval: None,
-            keep_alive_timeout: None,
-            max_connection_age: None,
         }
     }
 }

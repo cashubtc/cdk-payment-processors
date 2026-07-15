@@ -11,11 +11,6 @@ tls_enable = false
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
 
-# HTTP/2 keep-alive settings (optional)
-# keep_alive_interval = "30s"
-# keep_alive_timeout = "10s"
-# max_connection_age = "30m"
-
 # Bark backend configuration
 [backend]
 # BIP39 mnemonic - REQUIRED
