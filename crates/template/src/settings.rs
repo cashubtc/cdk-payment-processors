@@ -7,8 +7,7 @@ use serde::{Deserialize, Serialize};
 /// Backend-specific configuration
 ///
 /// Add fields specific to your Lightning backend implementation here.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[derive(Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct BackendConfig {
     // TODO: Add your backend-specific configuration fields here
     // Examples for different backends:
@@ -26,7 +25,6 @@ pub struct BackendConfig {
     // pub socket_path: Option<String>,
 }
 
-
 /// Main configuration structure
 ///
 /// Loads configuration from config.toml and environment variables.
@@ -41,25 +39,26 @@ pub struct Config {
     #[serde(default)]
     pub backend: BackendConfig,
 
+    /// gRPC server address
+    #[serde(default = "default_address")]
+    pub address: String,
+
     /// gRPC server port
-    pub server_port: u16,
+    #[serde(default = "default_port")]
+    pub port: u16,
 
     /// TLS config for gRPC server
     pub tls_enable: bool,
     pub tls_cert_path: String,
     pub tls_key_path: String,
+}
 
-    /// HTTP/2 keep-alive interval (e.g., "30s")
-    #[serde(default)]
-    pub keep_alive_interval: Option<String>,
+fn default_address() -> String {
+    "127.0.0.1".to_string()
+}
 
-    /// HTTP/2 keep-alive timeout (e.g., "10s")
-    #[serde(default)]
-    pub keep_alive_timeout: Option<String>,
-
-    /// Maximum connection age (e.g., "30m")
-    #[serde(default)]
-    pub max_connection_age: Option<String>,
+fn default_port() -> u16 {
+    50051
 }
 
 impl Default for Config {
@@ -67,13 +66,11 @@ impl Default for Config {
         Self {
             backend_type: "mock".to_string(),
             backend: BackendConfig::default(),
-            server_port: 50051,
+            address: default_address(),
+            port: default_port(),
             tls_enable: false,
             tls_cert_path: "certs/server.crt".to_string(),
             tls_key_path: "certs/server.key".to_string(),
-            keep_alive_interval: None,
-            keep_alive_timeout: None,
-            max_connection_age: None,
         }
     }
 }
@@ -87,10 +84,10 @@ impl Config {
     ///
     /// # Example
     /// ```rust,ignore
-    /// if let Ok(v) = std::env::var("API_URL") {
+    /// if let Ok(v) = std::env::var("BACKEND_API_URL") {
     ///     cfg.api_url = v;
     /// }
-    /// if let Ok(v) = std::env::var("API_KEY") {
+    /// if let Ok(v) = std::env::var("BACKEND_API_KEY") {
     ///     cfg.api_key = v;
     /// }
     /// ```
@@ -106,8 +103,12 @@ impl Config {
         // 2) Overlay environment variables explicitly
         // TODO: Add your backend-specific environment variable loading here
 
+        // Server configuration
+        if let Ok(v) = std::env::var("SERVER_ADDRESS") {
+            cfg.address = v;
+        }
         if let Ok(v) = std::env::var("SERVER_PORT") {
-            cfg.server_port = v.parse().unwrap_or(cfg.server_port);
+            cfg.port = v.parse().unwrap_or(cfg.port);
         }
         if let Ok(v) = std::env::var("TLS_ENABLE") {
             cfg.tls_enable = matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES");

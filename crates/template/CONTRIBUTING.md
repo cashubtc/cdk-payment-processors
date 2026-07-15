@@ -134,9 +134,9 @@ cargo clippy
 
 ```
 src/
-├── template_backend.rs  # Template backend implementation
-├── settings.rs         # Configuration management
-└── main.rs            # Server entry point
+├── backend.rs     # Template backend implementation
+├── settings.rs    # Configuration management
+└── main.rs        # Server entry point
 ```
 
 ## Testing

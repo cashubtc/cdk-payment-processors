@@ -122,7 +122,7 @@ pub trait MintPayment: Send + Sync {
 
 #### 1. Rename and Customize the Template
 
-Open `src/template_backend.rs` and rename `TemplateBackend` to your backend name:
+Open `src/backend.rs` and rename `TemplateBackend` to your backend name:
 
 ```rust
 // Before
@@ -264,7 +264,8 @@ pub struct Config {
     pub blink_wallet_id: String,
     
     // Existing gRPC server config
-    pub server_port: u16,
+    pub address: String,
+    pub port: u16,
     pub tls_enable: bool,
     // ...
 }
@@ -275,7 +276,8 @@ impl Default for Config {
             blink_api_url: "https://api.blink.sv/graphql".to_string(),
             blink_api_key: String::new(),
             blink_wallet_id: String::new(),
-            server_port: 50051,
+            address: "127.0.0.1".to_string(),
+            port: 50051,
             tls_enable: false,
             // ...
         }
@@ -351,13 +353,13 @@ grpcurl -plaintext -d '{}' 127.0.0.1:50051 \
 
 ```
 src/
-├── template_backend.rs     # Template backend with todo!() placeholders
-├── settings.rs            # Configuration management
-└── main.rs                # Entry point and server setup
+├── backend.rs     # Template backend with todo!() placeholders
+├── settings.rs    # Configuration management
+└── main.rs        # Entry point and server setup
 
-config.toml                # Configuration file (optional)
-Cargo.toml                # Dependencies and project metadata
-Dockerfile                # Docker build configuration
+config.toml        # Configuration file (optional)
+Cargo.toml         # Dependencies and project metadata
+Dockerfile         # Docker build configuration
 ```
 
 The `MintPayment` trait and related types are provided by the `cdk-common` crate.
@@ -368,6 +370,7 @@ The `MintPayment` trait and related types are provided by the `cdk-common` crate
 
 The template provides these base configuration options:
 
+- `SERVER_ADDRESS` - gRPC server bind address (default: 127.0.0.1)
 - `SERVER_PORT` - gRPC server port (default: 50051)
 - `TLS_ENABLE` - Enable TLS (true/false)
 - `TLS_CERT_PATH` - Path to TLS certificate
@@ -383,7 +386,8 @@ Add your own environment variables for backend-specific configuration.
 You can also use a `config.toml` file:
 
 ```toml
-server_port = 50051
+address = "127.0.0.1"
+port = 50051
 tls_enable = false
 
 # Add your backend configuration
@@ -620,4 +624,4 @@ A: Yes! As long as you can implement the `MintPayment` trait methods, you can in
 
 ---
 
-**Ready to build?** Start by renaming `template_backend.rs` to `your_backend.rs` and replacing the `todo!()` macros with your Lightning backend integration code!
+**Ready to build?** Start by editing `backend.rs` and replacing the `todo!()` macros with your Lightning backend integration code!

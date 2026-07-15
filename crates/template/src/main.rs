@@ -1,7 +1,7 @@
+mod backend;
 mod settings;
-mod template_backend;
 
-use crate::template_backend::TemplateBackend;
+use crate::backend::TemplateBackend;
 use anyhow::Result;
 use std::sync::Arc;
 use tokio::signal;
@@ -24,11 +24,17 @@ async fn main() -> Result<()> {
     // Optional: Test the connection
     // backend.test_connection().await?;
 
-    let server_addr = format!("0.0.0.0:{}", cfg.server_port);
-    tracing::info!("Starting CDK Payment Processor server on {}", server_addr);
+    tracing::info!(
+        "Starting CDK Payment Processor server on {}:{}",
+        cfg.address,
+        cfg.port
+    );
 
-    let mut server =
-        cdk_payment_processor::PaymentProcessorServer::new(backend, &server_addr, cfg.server_port)?;
+    let mut server = cdk_payment_processor::PaymentProcessorServer::new(
+        backend,
+        cfg.address.as_str(),
+        cfg.port,
+    )?;
 
     server.start(None).await?;
 

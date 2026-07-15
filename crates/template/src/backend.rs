@@ -1,4 +1,4 @@
-//! Template Lightning Backend Implementation
+//! Template Backend Implementation
 //!
 //! This is a template/stub implementation that you should customize for your specific
 //! Lightning backend (Blink, LND, Core Lightning, LDK, etc.).

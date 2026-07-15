@@ -1,8 +1,18 @@
 # Example configuration for CDK Payment Processor Template
-# Copy to config.toml and edit values as needed
+
+# Copy this file to config.toml and fill in your values
 
 # Backend type: mock, blink, lnd, cln, etc.
 backend_type = "mock"
+
+# gRPC server configuration
+address = "127.0.0.1"
+port = 50051
+
+# TLS configuration (optional)
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
 
 # Backend-specific configuration (examples below)
 [backend]
@@ -20,16 +30,3 @@ backend_type = "mock"
 
 # For Core Lightning backend (uncomment and configure):
 # socket_path = "/path/to/lightning-rpc"
-
-# gRPC server configuration
-server_port = 50051
-
-# TLS configuration (optional)
-tls_enable = false
-tls_cert_path = "certs/server.crt"
-tls_key_path = "certs/server.key"
-
-# HTTP/2 keep-alive settings (optional)
-# keep_alive_interval = "30s"
-# keep_alive_timeout = "10s"
-# max_connection_age = "30m"
