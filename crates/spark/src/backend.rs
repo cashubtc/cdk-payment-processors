@@ -76,6 +76,11 @@ impl SparkBackend {
             "Connected directly to Spark"
         );
 
+        match wallet.get_balance().await {
+            Ok(balance) => tracing::info!("Current Spark balance: {} sats", balance),
+            Err(e) => tracing::warn!("Failed to get current Spark balance: {}", e),
+        }
+
         let data_dir = PathBuf::from(&config.data_dir);
         std::fs::create_dir_all(&data_dir)
             .map_err(|e| anyhow::anyhow!("Failed to create data directory: {e}"))?;
