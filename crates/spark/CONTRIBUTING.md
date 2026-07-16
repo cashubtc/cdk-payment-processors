@@ -71,7 +71,7 @@ If you find a bug or have a suggestion:
 
 ### Prerequisites
 
-- Rust stable toolchain
+- Rust 1.88 or newer
 - `protoc` (Protocol Buffers compiler)
 - Git
 
@@ -134,7 +134,7 @@ cargo clippy
 
 ```
 src/
-├── breez_backend.rs    # Breez SDK Spark backend implementation
+├── backend.rs          # Low-level Spark wallet backend implementation
 ├── database.rs         # Quote database for payment mappings
 ├── settings.rs         # Configuration management
 └── main.rs            # Server entry point

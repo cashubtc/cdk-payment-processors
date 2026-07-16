@@ -18,8 +18,8 @@ async fn main() -> Result<()> {
     // Load configuration from environment
     let cfg = settings::Config::from_env();
 
-    // Initialize the Breez SDK Spark backend
-    tracing::info!("Initializing Breez SDK Spark payment processor");
+    // Initialize the Spark backend
+    tracing::info!("Initializing Spark payment processor");
     let backend = Arc::new(SparkBackend::new(cfg.backend).await?);
 
     tracing::info!(
@@ -42,9 +42,9 @@ async fn main() -> Result<()> {
         Err(e) => tracing::error!("Error waiting for shutdown signal: {}", e),
     }
 
-    // Disconnect from Breez SDK before stopping server
+    // Stop Spark wallet background processing before stopping the server
     if let Err(e) = backend.disconnect().await {
-        tracing::error!("Error disconnecting from Breez SDK Spark: {}", e);
+        tracing::error!("Error disconnecting from Spark: {}", e);
     }
 
     server.stop().await?;

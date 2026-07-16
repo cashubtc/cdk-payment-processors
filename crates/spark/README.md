@@ -1,230 +1,116 @@
-# CDK Payment Processor - Breez SDK Spark
+# CDK Payment Processor for Spark
 
-A gRPC-based Lightning Network payment processor that implements the CDK payment processor protocol using the Breez SDK Spark. This processor provides Lightning and Bitcoin payment capabilities with support for BOLT11 invoices.
+A gRPC payment processor implementing CDK's `MintPayment` interface with a
+self-custodial Spark wallet. It connects directly to the Spark operators and
+Spark Service Provider (SSP) through the low-level Rust `spark-wallet` crate.
+No Breez API key is required.
 
 ## Features
 
-- **BOLT11 Lightning Invoices**: Create and pay Lightning invoices
-- **Real-time Payment Events**: Event-driven notifications for incoming payments
-- **Payment History**: Track and query payment status
-- **Fee Estimation**: Get accurate fee quotes before sending payments
-- **Graceful Shutdown**: Proper cleanup and resource management
+- Create and pay amount-bound BOLT11 invoices
+- Stream incoming payment notifications
+- Persist quote-to-Spark-request mappings across restarts
+- Estimate Lightning fees before sending
+- Use stable Spark transfer IDs for retry-safe outgoing payments
+- Shut down Spark background processing cleanly
 
-## Architecture
-
-This payment processor:
-- Implements the CDK `MintPayment` trait for Cashu mint integration
-- Uses Breez SDK Spark for Lightning Network operations
-- Provides a gRPC server for external communication
-- Supports both configuration files and environment variables
+The project uses `spark-wallet` from the Breez Spark SDK `0.19.0` source tag.
+It does not depend on the high-level `breez-sdk-spark` crate or Breez auxiliary
+services.
 
 ## Prerequisites
 
-- Rust stable toolchain (1.70+)
+- Rust 1.88 or newer
 - `protoc` (Protocol Buffers compiler)
-  - macOS: `brew install protobuf`
-  - Ubuntu/Debian: `sudo apt-get install protobuf-compiler`
-  - Fedora: `sudo dnf install protobuf-compiler`
-- Breez API Key - Request from [Breez Technology](https://breez.technology/request-api-key/#contact-us-form-sdk)
-- BIP-39 mnemonic seed phrase (12 or 24 words)
+- A funded Spark wallet mnemonic (12 or 24 BIP-39 words)
 
-## Quick Start
-
-### 1. Clone the Repository
-
-```bash
-git clone https://github.com/thesimplekid/cdk-spark-payment-prcoessor.git
-cd cdk-spark-payment-prcoessor
-cargo check  # Verify compilation
-```
-
-### 2. Configure
-
-#### Option A: Environment Variables
-
-```bash
-export BREEZ_API_KEY="your-breez-api-key"
-export BREEZ_MNEMONIC="your twelve or twenty four word mnemonic phrase"
-# Optional: Defaults to ~/.cdk-spark-payment-processor
-# export WORKING_DIR="$HOME/.cdk-spark-payment-processor"
-export SERVER_ADDR="127.0.0.1"
-export SERVER_PORT="50051"
-```
-
-#### Option B: Configuration File
-
-```bash
-cp config.toml.example config.toml
-```
-
-Edit `config.toml`:
-
-```toml
-server_addr = "127.0.0.1"
-server_port = 50051
-
-[backend]
-api_key = "your-breez-api-key"
-mnemonic = "your twelve word mnemonic phrase"
-# Optional: Defaults to ~/.cdk-spark-payment-processor
-# working_dir = "/custom/path/to/data"
-```
-
-### 3. Run
-
-```bash
-# Development mode with logging
-RUST_LOG=info cargo run
-
-# Production release
-cargo run --release
-```
-
-The gRPC server will start on `127.0.0.1:50051` (or your configured address and port).
+Install `protoc` with `brew install protobuf` on macOS or
+`apt-get install protobuf-compiler` on Debian/Ubuntu.
 
 ## Configuration
 
-### Environment Variables
+The processor reads `config.toml` from its current directory. Environment
+variables override file values.
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `BREEZ_API_KEY` | Breez API key | Yes | - |
-| `BREEZ_MNEMONIC` | BIP-39 mnemonic phrase | Yes | - |
-| `BREEZ_PASSPHRASE` | Optional mnemonic passphrase | No | None |
-| `WORKING_DIR` | Working directory for all data | No | `~/.cdk-spark-payment-processor` |
-| `SERVER_ADDR` | gRPC server bind address | No | `127.0.0.1` |
-| `SERVER_PORT` | gRPC server port | No | `50051` |
-| `TLS_ENABLE` | Enable TLS | No | `false` |
-| `TLS_CERT_PATH` | TLS certificate path | No | `certs/server.crt` |
-| `TLS_KEY_PATH` | TLS private key path | No | `certs/server.key` |
-
-### Data Storage
-
-The working directory (`WORKING_DIR`) contains all application data:
-- `breez/` - Breez SDK storage (wallet state, channel data, etc.)
-- `quotes.db` - Database for mint/melt quote mappings
-
-### Configuration File
-
-The application looks for `config.toml` in:
-- `$WORKING_DIR/config.toml` if the `WORKING_DIR` environment variable is set
-- `~/.cdk-spark-payment-processor/config.toml` by default
-
-Environment variables override configuration file values.
-
-See `config.toml.example` for a complete configuration template.
-
-## gRPC API
-
-The server implements the CDK payment processor protocol:
-
-### Service: `cdk_payment_processor.CdkPaymentProcessor`
-
-| RPC | Description |
-|-----|-------------|
-| `GetSettings` | Get backend capabilities and settings |
-| `CreatePayment` | Create a Lightning invoice |
-| `GetPaymentQuote` | Get fee estimate for a payment |
-| `MakePayment` | Send a Lightning payment |
-| `CheckIncomingPayment` | Check status of an invoice |
-| `CheckOutgoingPayment` | Check status of an outgoing payment |
-| `WaitIncomingPayment` | Stream incoming payment events |
-
-### Examples
-
-#### Get Settings
+### Environment variables
 
 ```bash
-grpcurl -plaintext -d '{}' 127.0.0.1:50051 \
-  cdk_payment_processor.CdkPaymentProcessor/GetSettings
+export SPARK_MNEMONIC="your twelve or twenty four word mnemonic phrase"
+# Optional; defaults to .data/spark
+export SPARK_DATA_DIR=".data/spark"
+export SERVER_ADDRESS="127.0.0.1"
+export SERVER_PORT="50051"
 ```
 
-#### Create Invoice
+`SPARK_MNEMONIC` is required. Keep it secret: it controls the Spark wallet.
 
-```bash
-grpcurl -plaintext -d '{
-  "unit": "sat",
-  "options": {
-    "bolt11": {
-      "description": "Coffee",
-      "amount": 5000,
-      "unix_expiry": 300
-    }
-  }
-}' 127.0.0.1:50051 \
-  cdk_payment_processor.CdkPaymentProcessor/CreatePayment
+### Configuration file
+
+Copy `config.toml.example` to `config.toml` in the directory where the
+processor is started, then edit it:
+
+```toml
+backend_type = "spark"
+address = "127.0.0.1"
+port = 50051
+
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+
+[backend]
+mnemonic = "your twelve or twenty four word mnemonic phrase"
+data_dir = ".data/spark"
 ```
 
-#### Send Payment
+The processor stores `quotes.db` inside `data_dir`, which defaults to
+`.data/spark`. It contains invoices together with their Spark SSP request IDs
+and idempotent transfer IDs. Wallet balances and transfers are synchronized
+from the Spark network at startup.
+
+## Run
 
 ```bash
-grpcurl -plaintext -d '{
-  "payment_options": {
-    "bolt11": {
-      "bolt11": "lnbc50u1..."
-    }
-  }
-}' 127.0.0.1:50051 \
-  cdk_payment_processor.CdkPaymentProcessor/MakePayment
-```
-
-## Breez SDK Spark
-
-This payment processor uses the [Breez SDK Spark](https://github.com/breez/spark-sdk), which provides:
-
-- **Nodeless Lightning**: No need to run your own Lightning node
-- **Instant Onboarding**: Fast setup with just a mnemonic
-- **Low Fees**: Optimized routing and fee management
-- **Reliable**: Built on proven Lightning infrastructure
-- **Spark Transfers**: Direct peer-to-peer payments between Spark users
-
-### Resources
-
-- [Breez SDK Documentation](https://sdk-doc-spark.breez.technology/)
-- [API Reference](https://sdk-doc-spark.breez.technology/guide/getting_started.html)
-- [GitHub Repository](https://github.com/breez/spark-sdk)
-- [Request API Key](https://breez.technology/request-api-key/#contact-us-form-sdk)
-
-## Graceful Shutdown
-
-The server handles `SIGTERM` and `SIGINT` (Ctrl+C) signals gracefully:
-
-```bash
-# Run the server
-cargo run
-
-# Stop gracefully (Ctrl+C or SIGTERM)
-```
-
-The server will:
-1. Stop accepting new connections
-2. Complete in-flight requests
-3. Clean up resources
-4. Disconnect from Breez SDK
-5. Exit cleanly
-
-## Monitoring
-
-### Logging
-
-Set the `RUST_LOG` environment variable to control log levels:
-
-```bash
-# Info level (recommended for production)
+cargo check
 RUST_LOG=info cargo run
-
-# Debug level (development)
-RUST_LOG=debug cargo run
-
-# Trace level (detailed debugging)
-RUST_LOG=trace cargo run
-
-# Module-specific logging
-RUST_LOG=cdk_payment_processor=debug,breez_sdk_spark=info cargo run
 ```
+
+The gRPC server listens on `127.0.0.1:50051` by default.
+
+For detailed logs from the low-level wallet:
+
+```bash
+RUST_LOG=cdk_payment_processor_spark=debug,spark_wallet=info,spark=info cargo run
+```
+
+## Payment behavior
+
+The backend advertises amount-bound BOLT11 support. Incoming invoices do not
+embed a Spark address, and outgoing BOLT11 payments do not take the direct
+Spark-address shortcut. This ensures that the BOLT11 payment hash—the lookup
+identifier required by CDK—is actually settled.
+
+Outgoing calls may initially return `Pending`. CDK can poll the payment status;
+the backend queries the persisted Spark SSP send request and returns the
+preimage once the payment succeeds.
+
+## Development
+
+```bash
+cargo fmt -- --check
+cargo check
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
+See `CONTRIBUTING.md` for contribution guidelines.
+
+## Resources
+
+- [Spark documentation](https://docs.spark.money/)
+- [Breez Spark SDK source](https://github.com/breez/spark-sdk)
+- [CDK](https://github.com/cashubtc/cdk)
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
-
-You can obtain a Breez API key (required for the `api_key` configuration) from [Breez Technology](https://breez.technology/request-api-key/#contact-us-form-sdk).
+MIT License. See `LICENSE`.

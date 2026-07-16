@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Direct Spark operator and SSP integration through the low-level `spark-wallet` crate
+- Persistent Spark receive request, send request, and transfer ID mappings
 - Justfile with common development commands
 - GitHub Actions CI/CD workflow
 - Graceful shutdown handling (SIGTERM/SIGINT)
@@ -17,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTTP/2 keep-alive configuration options
 
 ### Changed
+- Replaced `breez-sdk-spark` 0.12.1 with `spark-wallet` from Breez Spark SDK 0.19.0
+- Renamed the wallet mnemonic environment variable from `BREEZ_MNEMONIC` to `SPARK_MNEMONIC`
+- Replaced `working_dir` and `WORKING_DIR` with the Bark-style `data_dir` setting and `SPARK_DATA_DIR` environment variable
+- Removed the mnemonic passphrase configuration option
+- Configuration is now loaded from `./config.toml`; quote mappings are stored in `<data_dir>/quotes.db`
+- BOLT11 payments now preserve payment-hash settlement instead of using embedded Spark-address routing
 - Fixed TemplateBackend Default implementation to not panic
 - Updated README.md with correct trait name (MintPayment instead of PaymentBackend)
 - Corrected file path references in documentation
@@ -24,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated project structure documentation to reflect actual files
 
 ### Fixed
+- Removed the Breez API-key requirement
+- Outgoing payments now report pending and failed states from the Spark SSP instead of always reporting paid
+- Outgoing payments use stable Spark transfer IDs for retry safety
 - Configuration mismatch between settings.rs and config.toml
 - Server now uses configured port instead of hardcoded value
 - Removed unused _cfg variable in main.rs

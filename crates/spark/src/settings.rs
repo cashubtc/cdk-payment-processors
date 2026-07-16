@@ -4,54 +4,26 @@ use figment::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Backend-specific configuration for Breez SDK Spark wallet
+/// Backend-specific configuration for Spark wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct BackendConfig {
-    /// Breez API key (required)
-    pub api_key: String,
-
-    /// Mnemonic seed phrase for the wallet (required)
+    /// BIP39 mnemonic for wallet seed
     pub mnemonic: String,
 
-    /// Optional passphrase for the mnemonic
-    #[serde(default)]
-    pub passphrase: Option<String>,
-
-    /// Working directory for all data (SDK storage, database, etc.)
-    #[serde(default = "default_working_dir")]
-    pub working_dir: String,
+    /// Data directory for persistent quote and Spark request mappings
+    #[serde(default = "default_data_dir")]
+    pub data_dir: String,
 }
 
-impl BackendConfig {
-    /// Get the storage directory for Breez SDK data
-    pub fn storage_dir(&self) -> String {
-        format!("{}/breez", self.working_dir)
-    }
-
-    /// Get the path to the quotes database
-    pub fn db_path(&self) -> String {
-        format!("{}/quotes.db", self.working_dir)
-    }
-}
-
-fn default_working_dir() -> String {
-    if let Some(home_dir) = home::home_dir() {
-        home_dir
-            .join(".cdk-spark-payment-processor")
-            .to_string_lossy()
-            .to_string()
-    } else {
-        "./.data".to_string()
-    }
+fn default_data_dir() -> String {
+    ".data/spark".to_string()
 }
 
 impl Default for BackendConfig {
     fn default() -> Self {
         Self {
-            api_key: String::new(),
             mnemonic: String::new(),
-            passphrase: None,
-            working_dir: default_working_dir(),
+            data_dir: default_data_dir(),
         }
     }
 }
@@ -113,44 +85,19 @@ impl Config {
         // 1) Start with defaults + config.toml only if it exists
         let base: Config = Default::default();
         let mut fig = Figment::from(Serialized::defaults(base));
-
-        // Check WORKING_DIR env var first to determine config file location
-        let working_dir = std::env::var("WORKING_DIR").unwrap_or_else(|_| default_working_dir());
-
-        let config_path = format!("{}/config.toml", working_dir);
-
-        if std::path::Path::new(&config_path).exists() {
-            tracing::info!("Loading configuration from {}", config_path);
-            fig = fig.merge(Toml::file(&config_path));
-        } else {
-            tracing::warn!(
-                "Configuration file {} not found, using defaults and environment variables",
-                config_path
-            );
+        if std::path::Path::new("config.toml").exists() {
+            fig = fig.merge(Toml::file("config.toml"));
         }
-
         let mut cfg: Config = fig.extract().unwrap_or_default();
 
         // 2) Overlay environment variables explicitly
-        // Breez-specific environment variables
-        if let Ok(v) = std::env::var("BREEZ_API_KEY") {
-            tracing::debug!("BREEZ_API_KEY loaded from environment");
-            cfg.backend.api_key = v;
-        }
-        if let Ok(v) = std::env::var("BREEZ_MNEMONIC") {
-            tracing::debug!("BREEZ_MNEMONIC loaded from environment");
+        if let Ok(v) = std::env::var("SPARK_MNEMONIC") {
+            tracing::debug!("SPARK_MNEMONIC loaded from environment");
             cfg.backend.mnemonic = v;
         }
-        if let Ok(v) = std::env::var("BREEZ_PASSPHRASE") {
-            tracing::debug!("BREEZ_PASSPHRASE loaded from environment");
-            cfg.backend.passphrase = Some(v);
+        if let Ok(v) = std::env::var("SPARK_DATA_DIR") {
+            cfg.backend.data_dir = v;
         }
-        // Ensure working_dir is set from env var (in case config file had different value)
-        if let Ok(v) = std::env::var("WORKING_DIR") {
-            tracing::debug!("WORKING_DIR loaded from environment: {}", v);
-            cfg.backend.working_dir = v;
-        }
-
         // Server configuration
         if let Ok(v) = std::env::var("SERVER_ADDRESS") {
             cfg.address = v;

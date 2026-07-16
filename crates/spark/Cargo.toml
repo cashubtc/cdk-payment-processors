@@ -3,12 +3,13 @@ name = "cdk-payment-processor-spark"
 version = "0.0.1"
 edition = "2021"
 authors = ["thesimplekid <tsk@thesimplekid.com>"]
-description = "CDK Payment Processor for Spark (using Breez SDK)"
+description = "CDK Payment Processor for Spark"
 license = "MIT"
 
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+bip39 = "2.2"
 bytes = "1"
 cdk-common = { version = "0.17.3", default-features = false, features = ["mint", "grpc"] }
 cdk-payment-processor = { version = "0.17.3", default-features = false }
@@ -24,9 +25,8 @@ tonic = { version = "0.14", features = ["transport"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
-breez-sdk-spark = { git = "https://github.com/breez/spark-sdk", tag = "0.12.1" }
+spark-wallet = { git = "https://github.com/breez/spark-sdk", tag = "0.19.0" }
 hex = "0.4"
-home = "0.5.12"
 redb = "3.1.0"
 
 [build-dependencies]
