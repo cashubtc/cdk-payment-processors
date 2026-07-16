@@ -716,6 +716,10 @@ impl BarkBackend {
         );
 
         info!("Bark backend initialized successfully");
+        match wallet.balance().await {
+            Ok(balance) => info!("Current Bark balance: {} sats", balance.spendable.to_sat()),
+            Err(e) => warn!("Failed to get current Bark balance: {}", e),
+        }
 
         Ok(Self {
             wallet: Arc::new(wallet),
