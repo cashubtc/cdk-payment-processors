@@ -40,9 +40,14 @@ export SPARK_MNEMONIC="your twelve or twenty four word mnemonic phrase"
 export SPARK_DATA_DIR=".data/spark"
 export SERVER_ADDRESS="127.0.0.1"
 export SERVER_PORT="50051"
+export TLS_ENABLE="false"
+export TLS_CERT_PATH="certs/server.crt"
+export TLS_KEY_PATH="certs/server.key"
 ```
 
-`SPARK_MNEMONIC` is required. Keep it secret: it controls the Spark wallet.
+A mnemonic is required, either through `SPARK_MNEMONIC` or the
+`backend.mnemonic` configuration value. Keep it secret: it controls the Spark
+wallet.
 
 ### Configuration file
 
@@ -63,6 +68,15 @@ mnemonic = "your twelve or twenty four word mnemonic phrase"
 data_dir = ".data/spark"
 ```
 
+Set `tls_enable = true` to serve gRPC over TLS. `tls_cert_path` must point to a
+PEM-encoded server certificate or certificate chain, and `tls_key_path` must
+point to its PEM-encoded private key. The process fails during startup if
+either file cannot be read or the TLS identity is invalid.
+
+When TLS is disabled, bind to loopback or terminate TLS in front of the
+service; do not expose the plaintext gRPC port directly to an untrusted
+network.
+
 The processor stores `quotes.db` inside `data_dir`, which defaults to
 `.data/spark`. It contains invoices together with their Spark SSP request IDs
 and idempotent transfer IDs. Wallet balances and transfers are synchronized
@@ -76,6 +90,8 @@ RUST_LOG=info cargo run
 ```
 
 The gRPC server listens on `127.0.0.1:50051` by default.
+After connecting, the processor logs the current Spark balance at `info` level.
+If the balance cannot be retrieved, it logs a warning and continues starting.
 
 For detailed logs from the low-level wallet:
 
