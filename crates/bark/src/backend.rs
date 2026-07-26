@@ -1689,8 +1689,27 @@ impl MintPayment for BarkBackend {
                     cdk_common::payment::Error::Custom("Invoice has no amount".to_string())
                 })?;
                 let amount_sat = amount_msat / 1000;
-                let fee_sats = Self::estimated_lightning_fee_sat(amount_sat);
 
+                // Try arkoor routing — quote 0 fee if destination is an Ark address
+                let invoice_str = invoice.to_string();
+                if let Ok(ark_addr) = ark::Address::from_str(&invoice_str) {
+                    if self.wallet.validate_arkoor_address(&ark_addr).await.is_ok() {
+                        debug!("Arkoor quote: {} sat, 0 fee", amount_sat);
+                        return Ok(PaymentQuoteResponse {
+                            request_lookup_id: Some(PaymentIdentifier::QuoteId(
+                                opts.quote_id.clone(),
+                            )),
+                            amount: Amount::new(amount_sat, CurrencyUnit::Sat),
+                            fee: Amount::new(0, CurrencyUnit::Sat),
+                            state: MeltQuoteState::Unpaid,
+                            extra_json: Some(serde_json::json!({"routing": "arkoor"})),
+                            estimated_blocks: None,
+                            fee_options: None,
+                        });
+                    }
+                }
+
+                let fee_sats = Self::estimated_lightning_fee_sat(amount_sat);
                 debug!("Payment quote: {} sat + {} sat fee", amount_sat, fee_sats);
 
                 Ok(PaymentQuoteResponse {
@@ -1901,7 +1920,31 @@ impl MintPayment for BarkBackend {
             );
         }
 
+        // Try arkoor routing first — zero fee for Ark-native destinations
         let invoice_str = invoice.to_string();
+        if let Ok(ark_addr) = ark::Address::from_str(&invoice_str) {
+            if self.wallet.validate_arkoor_address(&ark_addr).await.is_ok() {
+                let amount = bitcoin::Amount::from_sat(amount_sat);
+                match self.wallet.send_arkoor_payment(&ark_addr, amount).await {
+                    Ok(_vtxos) => {
+                        info!(
+                            "Sent arkoor payment {} sat to {} for quote {}",
+                            amount_sat, ark_addr, bolt11_options.quote_id
+                        );
+                        return Ok(MakePaymentResponse {
+                            payment_lookup_id: PaymentIdentifier::QuoteId(bolt11_options.quote_id),
+                            payment_proof: None,
+                            status: MeltQuoteState::Paid,
+                            total_spent: Amount::new(amount_sat, CurrencyUnit::Sat),
+                        });
+                    }
+                    Err(e) => {
+                        warn!("Arkoor send failed, falling back to Lightning: {}", e);
+                    }
+                }
+            }
+        }
+
         let mut send_intent = LightningSendIntentRecord {
             quote_id: bolt11_options.quote_id.to_string(),
             payment_hash: payment_hash_hex.clone(),
