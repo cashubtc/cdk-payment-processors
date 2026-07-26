@@ -677,35 +677,19 @@ impl BarkBackend {
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to load onchain wallet: {}", e))?;
 
-        // Try to open existing wallet first, fall back to creating new one
-        let wallet = match bark::Wallet::open(
-            &mnemonic,
-            db.clone(),
-            bark_config.clone(),
-            bark::lock_manager::platform_default(&data_dir)
-                .map_err(|e| anyhow::anyhow!("Failed to init lock manager: {}", e))?,
+        let wallet = bark::Wallet::open(
+            network,
+            bark::WalletSeed::new_from_mnemonic(network, &mnemonic),
+            bark_config,
+            bark::OpenWalletArgs {
+                run_daemon: false,
+                datadir: Some(data_dir.clone()),
+                persister: Some(db),
+                ..Default::default()
+            },
         )
         .await
-        {
-            Ok(wallet) => {
-                info!("Opened existing Bark wallet");
-                wallet
-            }
-            Err(e) => {
-                info!("Creating new Bark wallet (open failed: {})", e);
-                bark::Wallet::create(
-                    &mnemonic,
-                    network,
-                    bark_config,
-                    db,
-                    bark::lock_manager::platform_default(&data_dir)
-                        .map_err(|e| anyhow::anyhow!("Failed to init lock manager: {}", e))?,
-                    false,
-                )
-                .await
-                .map_err(|e| anyhow::anyhow!("Failed to create wallet: {}", e))?
-            }
-        };
+        .map_err(|e| anyhow::anyhow!("Failed to open or create wallet: {}", e))?;
 
         onchain_wallet
             .sync(wallet.chain())
