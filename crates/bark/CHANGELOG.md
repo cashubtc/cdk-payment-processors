@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The gRPC server now honors the configured bind address and port.
+- The gRPC server now honors `tls_enable`, `tls_cert_path`, and
+  `tls_key_path`.
 - Backend environment variables use the `BARK_*` namespace consistently.
 - Payment attempts are persisted before external Bark operations and
   reconciled after interruptions, reducing the risk of duplicate outgoing

@@ -54,6 +54,9 @@ cp config.toml.example config.toml
 | `backend.data_dir` | `BARK_DATA_DIR` | `.data/bark` |
 | `address` | `SERVER_ADDRESS` | `127.0.0.1` |
 | `port` | `SERVER_PORT` | `50051` |
+| `tls_enable` | `TLS_ENABLE` | `false` |
+| `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
+| `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
 
 Supported network values are `mainnet`, `testnet`, `signet`, and `regtest`.
 The Bark server, Esplora endpoint, and network must refer to the same network.
@@ -95,10 +98,14 @@ trusted network.
 
 ### Transport security
 
-The current binary starts the gRPC server without TLS. Although TLS fields are
-present in the configuration model, they are not applied by `main.rs`. Bind to
-loopback or terminate TLS in front of the service; do not expose the gRPC port
-directly to an untrusted network.
+Set `tls_enable = true` to serve gRPC over TLS. `tls_cert_path` must point to a
+PEM-encoded server certificate or certificate chain, and `tls_key_path` must
+point to its PEM-encoded private key. The process fails during startup if
+either file cannot be read or the TLS identity is invalid.
+
+When TLS is disabled, bind to loopback or terminate TLS in front of the
+service; do not expose the plaintext gRPC port directly to an untrusted
+network.
 
 The process handles `SIGINT` and `SIGTERM` and stops the gRPC server
 gracefully.
