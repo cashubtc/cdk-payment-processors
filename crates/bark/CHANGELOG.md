@@ -8,44 +8,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Justfile with common development commands
-- GitHub Actions CI/CD workflow
-- Graceful shutdown handling (SIGTERM/SIGINT)
-- CONTRIBUTING.md with contribution guidelines
-- CHANGELOG.md for tracking changes
-- Backend configuration structure matching config.toml
-- HTTP/2 keep-alive configuration options
+
+- A Bark-backed implementation of CDK's `MintPayment` interface, served through
+  the CDK payment processor gRPC server.
+- Fixed-amount BOLT11 invoice creation, outgoing payment quotes and payments,
+  payment status checks, and payment event streaming.
+- On-chain receive support that waits for one confirmation and boards deposits
+  into Ark.
+- On-chain payment quotes and sends that offboard Bark funds, including fee
+  estimation and transaction confirmation tracking.
+- Durable receive and send state backed by SQLite and redb, including quote
+  mappings, restart reconciliation, retry/review states, and event
+  deduplication.
+- Zero-fee arkoor routing for valid Ark destinations, with Lightning fallback.
+- Configuration through an optional `config.toml` file and `BARK_*` and
+  `SERVER_*` environment variables.
+- Graceful shutdown on `SIGINT` and `SIGTERM`.
+- Bark wallet balance logging during startup.
+- Development tooling through a Nix flake, GitHub Actions, and a `justfile`.
 
 ### Changed
-- Fixed TemplateBackend Default implementation to not panic
-- Updated README.md with correct trait name (MintPayment instead of PaymentBackend)
-- Corrected file path references in documentation
-- Wired up configuration properly in main.rs
-- Updated project structure documentation to reflect actual files
+
+- Updated the CDK integration to `cdk-common` and `cdk-payment-processor`
+  `0.17.3`.
+- Updated the Bark dependency stack to `0.3.0`.
+- Renamed the backend and configuration from Ark to Bark and consolidated the
+  implementation in `src/backend.rs`.
+- Changed the default network and public Bark/Esplora endpoints from signet to
+  mainnet.
+- Changed the default gRPC bind address from all interfaces to
+  `127.0.0.1`.
+- Replaced the committed runtime configuration with
+  `config.toml.example`; local `config.toml` files are ignored.
+- Rewrote the README around the implemented Bark processor and removed the
+  generic payment processor template guide.
 
 ### Fixed
-- Configuration mismatch between settings.rs and config.toml
-- Server now uses configured port instead of hardcoded value
-- Removed unused _cfg variable in main.rs
 
-## [0.0.1] - 2024-10-18
+- The gRPC server now honors the configured bind address and port.
+- Backend environment variables use the `BARK_*` namespace consistently.
+- Payment attempts are persisted before external Bark operations and
+  reconciled after interruptions, reducing the risk of duplicate outgoing
+  payments.
+- Completed incoming and outgoing payments are recorded so they are not
+  emitted repeatedly after polling or restart.
 
-### Added
-- Initial template release
-- Template backend with TODO placeholders for all MintPayment trait methods
-- Configuration management with figment (file + environment variables)
-- Comprehensive README with implementation guide
-- Docker support
-- Nix flake for development environment
-- Pre-commit hooks configuration
-- MIT License
+### Removed
 
-### Features
-- Complete gRPC server implementation via cdk-payment-processor
-- Clean MintPayment trait interface from cdk-common
-- TLS support configuration
-- Extensive inline documentation
-- Example configurations for different backends (Blink, LND, Core Lightning)
-
-[Unreleased]: https://github.com/thesimplekid/cdk-template-payment-processor/compare/v0.0.1...HEAD
-[0.0.1]: https://github.com/thesimplekid/cdk-template-payment-processor/releases/tag/v0.0.1
+- The placeholder template backend and its unimplemented payment methods.
+- Unused HTTP/2 keep-alive and connection-age configuration.
+- Runtime wallet and payment database files from the tracked source tree.
