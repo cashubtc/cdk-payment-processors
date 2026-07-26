@@ -12,7 +12,7 @@ This is a **template project** - it compiles successfully but won't run until yo
 - Protobuf definitions for CDK payment processor protocol
 - Clean `MintPayment` trait interface
 - Configuration management system
-- TLS support with auto-generated certificates
+- TLS support with configurable PEM certificate and private key
 - Extensive inline documentation and examples
 - Template backend with `todo!()` placeholders  
 
@@ -372,9 +372,9 @@ The template provides these base configuration options:
 
 - `SERVER_ADDRESS` - gRPC server bind address (default: 127.0.0.1)
 - `SERVER_PORT` - gRPC server port (default: 50051)
-- `TLS_ENABLE` - Enable TLS (true/false)
-- `TLS_CERT_PATH` - Path to TLS certificate
-- `TLS_KEY_PATH` - Path to TLS private key
+- `TLS_ENABLE` - Enable TLS (default: false)
+- `TLS_CERT_PATH` - Path to a PEM-encoded TLS certificate or certificate chain (default: certs/server.crt)
+- `TLS_KEY_PATH` - Path to the PEM-encoded TLS private key (default: certs/server.key)
 - `KEEP_ALIVE_INTERVAL` - HTTP/2 keep-alive interval (e.g., "30s")
 - `KEEP_ALIVE_TIMEOUT` - HTTP/2 keep-alive timeout (e.g., "10s")
 - `MAX_CONNECTION_AGE` - Maximum connection age (e.g., "30m")
@@ -389,11 +389,24 @@ You can also use a `config.toml` file:
 address = "127.0.0.1"
 port = 50051
 tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
 
 # Add your backend configuration
 blink_api_url = "https://api.blink.sv/graphql"
 blink_api_key = "your-key-here"
 ```
+
+### Transport Security
+
+Set `tls_enable = true` to serve gRPC over TLS. `tls_cert_path` must point to a
+PEM-encoded server certificate or certificate chain, and `tls_key_path` must
+point to its PEM-encoded private key. The process fails during startup if
+either file cannot be read or the TLS identity is invalid.
+
+When TLS is disabled, bind to loopback or terminate TLS in front of the
+service; do not expose the plaintext gRPC port directly to an untrusted
+network.
 
 ## gRPC API
 

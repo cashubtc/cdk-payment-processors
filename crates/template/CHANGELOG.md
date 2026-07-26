@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Configuration mismatch between settings.rs and config.toml
 - Server now uses configured port instead of hardcoded value
+- The gRPC server now honors `tls_enable`, `tls_cert_path`, and
+  `tls_key_path`.
 - Removed unused _cfg variable in main.rs
 
 ## [0.0.1] - 2024-10-18
