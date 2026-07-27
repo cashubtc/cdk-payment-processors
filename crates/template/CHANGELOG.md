@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - HTTP/2 keep-alive configuration options
 
 ### Changed
+- Made `TemplateBackend::new` asynchronous to match `BarkBackend::new` and
+  support initialization that must be awaited.
 - Fixed TemplateBackend Default implementation to not panic
 - Updated README.md with correct trait name (MintPayment instead of PaymentBackend)
 - Corrected file path references in documentation

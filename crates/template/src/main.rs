@@ -35,10 +35,7 @@ async fn main() -> Result<()> {
 
     // TODO: Initialize your Lightning backend here
     // For now, we use the template backend which will panic with todo!() on any method call
-    let backend = Arc::new(TemplateBackend::new()?);
-
-    // Optional: Test the connection
-    // backend.test_connection().await?;
+    let backend = Arc::new(TemplateBackend::new(&cfg.backend).await?);
 
     let scheme = if cfg.tls_enable { "https" } else { "http" };
     tracing::info!(

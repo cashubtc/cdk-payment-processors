@@ -14,14 +14,14 @@ This is a **template project** - it compiles successfully but won't run until yo
 - Configuration management system
 - TLS support with configurable PEM certificate and private key
 - Extensive inline documentation and examples
-- Template backend with `todo!()` placeholders  
+- Template backend with `todo!()` placeholders
 
 ### What You Need to Add
 
 - Your Lightning backend implementation
 - API integration code (HTTP, gRPC, WebSocket, etc.)
 - Backend-specific configuration
-- Authentication and connection management  
+- Authentication and connection management
 
 ## Quick Start
 
@@ -52,8 +52,8 @@ See the [Implementation Guide](#implementation-guide) below for detailed steps.
 
 ```bash
 # Configure your backend
-export API_KEY="your-api-key"
-export API_URL="https://your-backend-api"
+export TEMPLATE_API_URL="your-api-url-here"
+export TEMPLATE_API_KEY="your-api-key-here"
 
 # Run the server
 RUST_LOG=info cargo run --release
@@ -72,44 +72,44 @@ pub trait MintPayment: Send + Sync {
 
     // Get backend capabilities and settings
     async fn get_settings(&self) -> Result<SettingsResponse, Self::Err>;
-    
+
     // Create an incoming payment request (invoice)
     async fn create_incoming_payment_request(
         &self,
         options: IncomingPaymentOptions,
     ) -> Result<CreateIncomingPaymentResponse, Self::Err>;
-    
+
     // Get a payment quote (fee estimation)
     async fn get_payment_quote(
         &self,
         unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<PaymentQuoteResponse, Self::Err>;
-    
+
     // Make an outgoing payment
     async fn make_payment(
         &self,
         unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<MakePaymentResponse, Self::Err>;
-    
+
     // Stream incoming payment events
     async fn wait_payment_event(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Event> + Send>>, Self::Err>;
-    
+
     // Check if the payment event stream is active
     fn is_payment_event_stream_active(&self) -> bool;
-    
+
     // Cancel the payment event stream
     fn cancel_payment_event_stream(&self);
-    
+
     // Check incoming payment status
     async fn check_incoming_payment_status(
         &self,
         payment_identifier: &PaymentIdentifier,
     ) -> Result<Vec<WaitPaymentResponse>, Self::Err>;
-    
+
     // Check outgoing payment status
     async fn check_outgoing_payment(
         &self,
@@ -163,24 +163,24 @@ tokio-tungstenite = "0.21"
 
 ```rust
 impl BlinkBackend {
-    pub fn new(api_url: String, api_key: String) -> anyhow::Result<Self> {
+    pub async fn new(config: &BackendConfig) -> anyhow::Result<Self> {
         // Validate configuration
-        if api_key.is_empty() {
+        if config.api_key.is_empty() {
             anyhow::bail!("API key is required");
         }
-        
+
         // Create HTTP client
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
-        
+
         Ok(Self {
             client,
-            api_url,
-            api_key,
+            api_url: config.api_url.clone(),
+            api_key: config.api_key.clone(),
         })
     }
-    
+
     pub async fn test_connection(&self) -> anyhow::Result<()> {
         // Test connectivity to your backend
         let response = self.client
@@ -188,11 +188,11 @@ impl BlinkBackend {
             .header("Authorization", format!("Bearer {}", self.api_key))
             .send()
             .await?;
-        
+
         if !response.status().is_success() {
             anyhow::bail!("Connection test failed");
         }
-        
+
         Ok(())
     }
 }
@@ -221,18 +221,18 @@ async fn create_invoice(
         .send()
         .await
         .map_err(|e| BackendError::Network(e.to_string()))?;
-    
+
     // Check response status
     if !response.status().is_success() {
         return Err(BackendError::InvoiceError(
             format!("Failed to create invoice: {}", response.status())
         ));
     }
-    
+
     // Parse response
     let data: serde_json::Value = response.json().await
         .map_err(|e| BackendError::Internal(e.to_string()))?;
-    
+
     // Map to Invoice struct
     Ok(Invoice {
         payment_request: data["payment_request"].as_str()
@@ -256,50 +256,32 @@ async fn create_invoice(
 Add your backend-specific configuration to `src/settings.rs`:
 
 ```rust
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Config {
-    // Add your fields
-    pub blink_api_url: String,
-    pub blink_api_key: String,
-    pub blink_wallet_id: String,
-    
-    // Existing gRPC server config
-    pub address: String,
-    pub port: u16,
-    pub tls_enable: bool,
-    // ...
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct BackendConfig {
+    pub api_url: String,
+    pub api_key: String,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            blink_api_url: "https://api.blink.sv/graphql".to_string(),
-            blink_api_key: String::new(),
-            blink_wallet_id: String::new(),
-            address: "127.0.0.1".to_string(),
-            port: 50051,
-            tls_enable: false,
-            // ...
-        }
-    }
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Config {
+    #[serde(default)]
+    pub backend: BackendConfig,
+
+    // Existing gRPC server configuration...
 }
 
 impl Config {
-    pub fn load() -> Self {
+    pub fn load() -> anyhow::Result<Self> {
         // ... existing code ...
-        
         // Add environment variable loading
-        if let Ok(v) = std::env::var("BLINK_API_URL") {
-            cfg.blink_api_url = v;
+        if let Ok(v) = std::env::var("TEMPLATE_API_URL") {
+
+            cfg.backend.api_url = v;
         }
-        if let Ok(v) = std::env::var("BLINK_API_KEY") {
-            cfg.blink_api_key = v;
+        if let Ok(v) = std::env::var("TEMPLATE_API_KEY") {
+            cfg.backend.api_key = v;
         }
-        if let Ok(v) = std::env::var("BLINK_WALLET_ID") {
-            cfg.blink_wallet_id = v;
-        }
-        
-        cfg
+        Ok(cfg)
     }
 }
 ```
@@ -314,21 +296,18 @@ use crate::blink_backend::BlinkBackend;  // Your backend
 #[tokio::main]
 async fn main() -> Result<()> {
     // ... logging setup ...
-    
-    let cfg = settings::Config::from_env();
-    
+
+    let cfg = settings::Config::from_env()?;
+
     // Initialize your backend
-    let backend = BlinkBackend::new(
-        cfg.blink_api_url.clone(),
-        cfg.blink_api_key.clone(),
-    )?;
-    
+    let backend = BlinkBackend::new(&cfg.backend).await?;
+
     // Test connection
     backend.test_connection().await?;
     tracing::info!("Successfully connected to Blink backend");
-    
+
     let backend: Arc<dyn MintPayment<Err = _>> = Arc::new(backend);
-    
+
     // ... rest of server setup ...
 }
 ```
@@ -393,8 +372,9 @@ tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
 
 # Add your backend configuration
-blink_api_url = "https://api.blink.sv/graphql"
-blink_api_key = "your-key-here"
+[backend]
+api_url = "https://api.blink.sv/graphql"
+api_key = "your-key-here"
 ```
 
 ### Transport Security
@@ -524,7 +504,7 @@ nix develop
 
 The hooks will automatically run on `git commit`:
 - `rustfmt` - Format Rust code
-- `nixpkgs-fmt` - Format Nix files  
+- `nixpkgs-fmt` - Format Nix files
 - `typos` - Check for typos
 - `commitizen` - Enforce conventional commit messages
 

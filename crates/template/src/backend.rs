@@ -25,6 +25,8 @@ use cdk_common::payment::{
 };
 use futures_core::Stream;
 
+use crate::settings::BackendConfig;
+
 /// Template backend implementation
 ///
 /// Replace this with your actual Lightning backend name and add the necessary fields:
@@ -60,8 +62,8 @@ impl TemplateBackend {
     ///
     /// # Example
     /// ```rust,ignore
-    /// pub fn new(api_url: String, api_key: String) -> anyhow::Result<Self> {
-    ///     if api_key.is_empty() {
+    /// pub async fn new(config: &BackendConfig) -> anyhow::Result<Self> {
+    ///     if config.api_key.is_empty() {
     ///         anyhow::bail!("API key is required");
     ///     }
     ///
@@ -71,13 +73,13 @@ impl TemplateBackend {
     ///
     ///     Ok(Self {
     ///         client,
-    ///         api_url,
-    ///         api_key,
+    ///         api_url: config.api_url.clone(),
+    ///         api_key: config.api_key.clone(),
     ///         payment_event_stream_active: Arc::new(AtomicBool::new(false)),
     ///     })
     /// }
     /// ```
-    pub fn new() -> anyhow::Result<Self> {
+    pub async fn new(_config: &BackendConfig) -> anyhow::Result<Self> {
         // TODO: Replace this with your actual backend initialization
         // This default implementation allows the template to compile and run
         Ok(Self::default())

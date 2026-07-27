@@ -6,24 +6,13 @@ use figment::{
 use serde::{Deserialize, Serialize};
 
 /// Backend-specific configuration
-///
-/// Add fields specific to your Lightning backend implementation here.
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct BackendConfig {
     // TODO: Add your backend-specific configuration fields here
-    // Examples for different backends:
-    // For Blink:
-    // pub api_url: Option<String>,
-    // pub api_key: Option<String>,
-    // pub wallet_id: Option<String>,
     //
-    // For LND:
-    // pub host: Option<String>,
-    // pub macaroon_path: Option<String>,
-    // pub tls_cert_path: Option<String>,
-    //
-    // For Core Lightning:
-    // pub socket_path: Option<String>,
+    // Example:
+    pub api_url: String,
+    pub api_key: String,
 }
 
 /// Main configuration structure
@@ -32,7 +21,7 @@ pub struct BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend type identifier (e.g., "blink", "lnd", "cln", "mock")
+    /// Backend type identifier (e.g., "template")
     #[serde(default)]
     pub backend_type: String,
 
@@ -76,7 +65,7 @@ fn default_tls_key_path() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend_type: "mock".to_string(),
+            backend_type: "template".to_string(),
             backend: BackendConfig::default(),
             address: default_address(),
             port: default_port(),
@@ -90,19 +79,6 @@ impl Default for Config {
 impl Config {
     /// Load from config.toml (if present) and environment variables.
     /// Environment variables override file values.
-    ///
-    /// # TODO
-    /// Add environment variable loading for your backend-specific configuration
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// if let Ok(v) = std::env::var("BACKEND_API_URL") {
-    ///     cfg.api_url = v;
-    /// }
-    /// if let Ok(v) = std::env::var("BACKEND_API_KEY") {
-    ///     cfg.api_key = v;
-    /// }
-    /// ```
     pub fn load() -> Result<Self> {
         // 1) Start with defaults + config.toml only if it exists
         let base: Config = Default::default();
@@ -113,7 +89,13 @@ impl Config {
         let mut cfg = extract_config(fig)?;
 
         // 2) Overlay environment variables explicitly
-        // TODO: Add your backend-specific environment variable loading here
+        // Example:
+        if let Ok(v) = std::env::var("TEMPLATE_API_URL") {
+            cfg.backend.api_url = v;
+        }
+        if let Ok(v) = std::env::var("TEMPLATE_API_KEY") {
+            cfg.backend.api_key = v;
+        }
 
         // Server configuration
         if let Ok(v) = std::env::var("SERVER_ADDRESS") {
