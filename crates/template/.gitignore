@@ -1,0 +1,6 @@
+/target
+.idea/
+*.pem
+*.key
+*.crt
+.pre-commit-config.yaml
