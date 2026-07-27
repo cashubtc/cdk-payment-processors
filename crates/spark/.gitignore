@@ -1,0 +1,10 @@
+/target
+.idea/
+*.pem
+*.key
+*.crt
+.pre-commit-config.yaml
+.data/
+.cdk-spark-payment-processor/
+config.toml
+*.db

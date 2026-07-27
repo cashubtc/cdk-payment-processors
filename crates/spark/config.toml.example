@@ -1,0 +1,21 @@
+# Copy this file to config.toml and fill in your values
+
+backend_type = "spark"
+
+# gRPC server configuration
+address = "127.0.0.1"
+port = 50051
+
+# TLS configuration (optional)
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+
+# Spark backend configuration
+[backend]
+# BIP39 mnemonic - REQUIRED
+# Generate with: cargo install bip39-cli && bip39 generate 12
+mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+# Data directory for quote and Spark request mappings
+data_dir = ".data/spark"
