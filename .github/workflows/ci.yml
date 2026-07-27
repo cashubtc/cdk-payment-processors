@@ -8,22 +8,48 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
 jobs:
+  changes:
+    name: Detect changed crates
+    runs-on: ubuntu-latest
+    outputs:
+      crates: ${{ steps.filter.outputs.changes }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Detect changed crates
+        id: filter
+        uses: dorny/paths-filter@v4
+        with:
+          base: ${{ github.ref }}
+          filters: |
+            bark:
+              - 'crates/bark/**'
+              - '.github/workflows/ci.yml'
+            spark:
+              - 'crates/spark/**'
+              - '.github/workflows/ci.yml'
+            template:
+              - 'crates/template/**'
+              - '.github/workflows/ci.yml'
+
   crate:
     name: ${{ matrix.crate }}
+    needs: changes
+    if: ${{ needs.changes.outputs.crates != '[]' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        crate:
-          - bark
-          - spark
-          - template
+        crate: ${{ fromJSON(needs.changes.outputs.crates) }}
     defaults:
       run:
         working-directory: crates/${{ matrix.crate }}
