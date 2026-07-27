@@ -16,17 +16,23 @@ env:
 
 jobs:
   changes:
-    name: Detect changed crates
+    name: Select crates
     runs-on: ubuntu-latest
     outputs:
-      crates: ${{ steps.filter.outputs.changes }}
+      crates: ${{ steps.all.outputs.crates || steps.filter.outputs.changes }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Select all crates
+        id: all
+        if: github.event_name == 'push'
+        run: echo 'crates=["bark","spark","template"]' >> "$GITHUB_OUTPUT"
+
       - name: Detect changed crates
         id: filter
+        if: github.event_name == 'pull_request'
         uses: dorny/paths-filter@v4
         with:
           base: ${{ github.ref }}
