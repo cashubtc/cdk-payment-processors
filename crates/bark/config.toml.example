@@ -1,0 +1,30 @@
+# Copy this file to config.toml and fill in your values
+
+backend_type = "bark"
+
+# gRPC server configuration
+address = "127.0.0.1"
+port = 50051
+
+# TLS configuration (optional)
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+
+# Bark backend configuration
+[backend]
+# BIP39 mnemonic - REQUIRED
+# Generate with: cargo install bip39-cli && bip39 generate 12
+mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+
+# Bark server address (default: Second's server)
+server_address = "https://ark.second.tech"
+
+# Esplora API address for on-chain data
+esplora_address = "https://mempool.second.tech/api"
+
+# Bitcoin network: signet, testnet, mainnet
+network = "mainnet"
+
+# Data directory for SQLite database
+data_dir = ".data/bark"
