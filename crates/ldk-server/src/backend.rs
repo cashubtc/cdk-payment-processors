@@ -1,6 +1,3 @@
-//! CDK Lightning backend for LDK Server.
-
-
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -30,7 +27,6 @@ use ldk_server_client::ldk_server_grpc::types::{
 };
 use lightning::offers::offer::Amount as OfferAmount;
 use tokio_util::sync::CancellationToken;
-
 
 use crate::error::Error;
 

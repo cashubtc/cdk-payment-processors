@@ -133,7 +133,7 @@ async fn self_check(addr: &str, port: u16) -> Result<()> {
                 if attempt < 10 {
                     tokio::time::sleep(Duration::from_millis(500)).await;
                 }
-            },
+            }
         }
     }
     anyhow::bail!(
@@ -151,13 +151,17 @@ fn grpc_server_builder(cfg: &Config) -> Result<Server> {
     }
 
     let certificate = fs::read(&cfg.tls_cert_path)
-        .with_context(|| format!("failed to read TLS certificate {}", cfg.tls_cert_path))?;
+        .with_context(|| format!("failed to read TLS certificate `{}`", cfg.tls_cert_path))?;
     let private_key = fs::read(&cfg.tls_key_path)
-        .with_context(|| format!("failed to read TLS private key {}", cfg.tls_key_path))?;
+        .with_context(|| format!("failed to read TLS private key `{}`", cfg.tls_key_path))?;
     let identity = Identity::from_pem(certificate, private_key);
     let tls_config = ServerTlsConfig::new().identity(identity);
 
-    tracing::info!(certificate = %cfg.tls_cert_path, "TLS is enabled");
+    tracing::info!(
+        certificate = %cfg.tls_cert_path,
+        private_key = %cfg.tls_key_path,
+        "TLS is enabled"
+    );
 
     server
         .tls_config(tls_config)
@@ -167,7 +171,9 @@ fn grpc_server_builder(cfg: &Config) -> Result<Server> {
 /// Wait for shutdown signal (SIGTERM or SIGINT).
 async fn shutdown_signal() -> Result<()> {
     let ctrl_c = async {
-        signal::ctrl_c().await.expect("failed to install Ctrl+C handler");
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
     };
 
     #[cfg(unix)]

@@ -23,7 +23,7 @@ ln_backend = "grpcprocessor"
 
 [grpc_processor]
 addr = "http://127.0.0.1"
-port = 50071
+port = 50051
 ```
 
 ## Configuration
@@ -32,7 +32,7 @@ See [config.toml.example](config.toml.example). Every value can also be set via 
 
 | Key | Description | Default |
 |---|---|---|
-| `address` / `port` | gRPC listen address for the processor | `127.0.0.1:50071` |
+| `address` / `port` | gRPC listen address for the processor | `127.0.0.1:50051` |
 | `tls_enable` | TLS for the processor gRPC server | `false` |
 | `backend.address` | LDK Server gRPC address (no scheme) | required |
 | `backend.api_key` | LDK Server HMAC API key (hex) | required |

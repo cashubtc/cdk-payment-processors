@@ -75,7 +75,7 @@ fn default_address() -> String {
 }
 
 fn default_port() -> u16 {
-    50071
+    50051
 }
 
 fn default_tls_cert_path() -> String {
@@ -95,8 +95,14 @@ impl Config {
             .merge(figment::providers::Env::prefixed("CDK_LDK_"))
             .extract()
             .context("failed to load configuration")?;
-        anyhow::ensure!(!cfg.backend.address.is_empty(), "backend.address is required");
-        anyhow::ensure!(!cfg.backend.api_key.is_empty(), "backend.api_key is required");
+        anyhow::ensure!(
+            !cfg.backend.address.is_empty(),
+            "backend.address is required"
+        );
+        anyhow::ensure!(
+            !cfg.backend.api_key.is_empty(),
+            "backend.api_key is required"
+        );
         anyhow::ensure!(
             !cfg.backend.tls_cert_path.is_empty(),
             "backend.tls_cert_path is required"
