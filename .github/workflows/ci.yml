@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  crate:
+    name: ${{ matrix.crate }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        crate:
+          - bark
+          - spark
+          - template
+    defaults:
+      run:
+        working-directory: crates/${{ matrix.crate }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.crate }}-cargo-${{ hashFiles('Cargo.lock', 'Cargo.toml', format('crates/{0}/Cargo.toml', matrix.crate)) }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.crate }}-cargo-
+
+      - name: Check formatting
+        run: cargo fmt -- --check
+
+      - name: Run cargo check
+        run: cargo check --all-features
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Run Clippy
+        run: cargo clippy --all-features -- -D warnings
+
+      - name: Build release
+        run: cargo build --release --all-features
