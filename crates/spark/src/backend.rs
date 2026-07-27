@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use async_trait::async_trait;
 use bip39::Mnemonic;
@@ -23,17 +24,74 @@ use spark_wallet::{
     SparkSignerAdapter, SparkWallet, SparkWalletConfig, TransferDirection, TransferId,
     TransferStatus, WalletBuilder, WalletEvent, WalletTransfer,
 };
-use tokio::sync::{broadcast, watch, Mutex, Notify};
+use tokio::sync::{broadcast, mpsc, watch, Mutex};
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::database::QuoteDatabase;
 use crate::settings::BackendConfig;
 
+struct PaymentEventStreamActivity {
+    active_streams: Arc<AtomicUsize>,
+    active: AtomicBool,
+}
+
+impl PaymentEventStreamActivity {
+    fn new(active_streams: Arc<AtomicUsize>) -> Self {
+        active_streams.fetch_add(1, Ordering::Relaxed);
+        Self {
+            active_streams,
+            active: AtomicBool::new(true),
+        }
+    }
+
+    fn deactivate(&self) {
+        if self.active.swap(false, Ordering::Relaxed) {
+            self.active_streams.fetch_sub(1, Ordering::Relaxed);
+        }
+    }
+}
+
+impl Drop for PaymentEventStreamActivity {
+    fn drop(&mut self) {
+        self.deactivate();
+    }
+}
+
+/// Event stream that releases its Spark subscription activity on completion or drop.
+struct PaymentEventStream {
+    receiver: ReceiverStream<Event>,
+    activity: Arc<PaymentEventStreamActivity>,
+}
+
+impl PaymentEventStream {
+    fn new(receiver: mpsc::Receiver<Event>, active_streams: Arc<AtomicUsize>) -> Self {
+        Self {
+            receiver: ReceiverStream::new(receiver),
+            activity: Arc::new(PaymentEventStreamActivity::new(active_streams)),
+        }
+    }
+}
+
+impl Stream for PaymentEventStream {
+    type Item = Event;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.get_mut().receiver).poll_next(cx)
+    }
+}
+
+impl Drop for PaymentEventStream {
+    fn drop(&mut self) {
+        self.activity.deactivate();
+    }
+}
+
 /// Low-level Spark wallet backend implementation.
 pub struct SparkBackend {
     wallet: Arc<SparkWallet>,
-    wait_invoice_active: Arc<AtomicBool>,
+    active_payment_streams: Arc<AtomicUsize>,
     initial_event_receiver: Arc<Mutex<Option<broadcast::Receiver<WalletEvent>>>>,
-    event_cancel: Arc<Notify>,
+    event_cancel: watch::Sender<()>,
     db: QuoteDatabase,
     shutdown_sender: watch::Sender<()>,
 }
@@ -59,6 +117,7 @@ impl SparkBackend {
         wallet_config.max_concurrent_claims = 5;
 
         let (shutdown_sender, shutdown_receiver) = watch::channel(());
+        let (event_cancel, _) = watch::channel(());
         let wallet = Arc::new(
             WalletBuilder::new(wallet_config, spark_signer)
                 .with_cancellation_token(shutdown_receiver)
@@ -90,9 +149,9 @@ impl SparkBackend {
 
         Ok(Self {
             wallet,
-            wait_invoice_active: Arc::new(AtomicBool::new(false)),
+            active_payment_streams: Arc::new(AtomicUsize::new(0)),
             initial_event_receiver: Arc::new(Mutex::new(Some(event_receiver))),
-            event_cancel: Arc::new(Notify::new()),
+            event_cancel,
             db,
             shutdown_sender,
         })
@@ -282,7 +341,7 @@ impl MintPayment for SparkBackend {
         Ok(SettingsResponse {
             unit: "sat".to_string(),
             bolt11: Some(Bolt11Settings {
-                mpp: true,
+                mpp: false,
                 amountless: false,
                 invoice_description: false,
             }),
@@ -305,7 +364,7 @@ impl MintPayment for SparkBackend {
             return Err(Error::AmountMismatch);
         }
 
-        let description = opts.description.unwrap_or_else(|| "Payment".to_string());
+        let description = opts.description.as_deref().unwrap_or("Payment");
         let expiry_secs = opts
             .unix_expiry
             .map(|expiry| {
@@ -323,7 +382,7 @@ impl MintPayment for SparkBackend {
             .wallet
             .create_lightning_invoice(
                 amount_sats,
-                Some(InvoiceDescription::Memo(description)),
+                Some(InvoiceDescription::Memo(description.to_string())),
                 None,
                 expiry_secs,
                 false,
@@ -448,24 +507,21 @@ impl MintPayment for SparkBackend {
     async fn wait_payment_event(
         &self,
     ) -> Result<Pin<Box<dyn Stream<Item = Event> + Send>>, Self::Err> {
-        use tokio::sync::mpsc;
-        use tokio_stream::wrappers::ReceiverStream;
-
-        self.wait_invoice_active.store(true, Ordering::Relaxed);
         let mut spark_events = self
             .initial_event_receiver
             .lock()
             .await
             .take()
             .unwrap_or_else(|| self.wallet.subscribe_events());
-        let active = Arc::clone(&self.wait_invoice_active);
-        let cancel = Arc::clone(&self.event_cancel);
+        let mut cancel = self.event_cancel.subscribe();
         let (sender, receiver) = mpsc::channel(100);
+        let stream = PaymentEventStream::new(receiver, Arc::clone(&self.active_payment_streams));
+        let activity = Arc::clone(&stream.activity);
 
         tokio::spawn(async move {
             loop {
                 tokio::select! {
-                    _ = cancel.notified() => break,
+                    _ = cancel.changed() => break,
                     _ = sender.closed() => break,
                     event = spark_events.recv() => {
                         match event {
@@ -484,19 +540,18 @@ impl MintPayment for SparkBackend {
                     }
                 }
             }
-            active.store(false, Ordering::Relaxed);
+            activity.deactivate();
         });
 
-        Ok(Box::pin(ReceiverStream::new(receiver)))
+        Ok(Box::pin(stream))
     }
 
     fn is_payment_event_stream_active(&self) -> bool {
-        self.wait_invoice_active.load(Ordering::Relaxed)
+        self.active_payment_streams.load(Ordering::Relaxed) > 0
     }
 
     fn cancel_payment_event_stream(&self) {
-        self.wait_invoice_active.store(false, Ordering::Relaxed);
-        self.event_cancel.notify_waiters();
+        let _ = self.event_cancel.send(());
     }
 
     async fn check_incoming_payment_status(
@@ -641,9 +696,32 @@ impl MintPayment for SparkBackend {
 
 #[cfg(test)]
 mod tests {
-    use super::SparkBackend;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    use super::{PaymentEventStream, SparkBackend};
     use cdk_common::nuts::MeltQuoteState;
     use spark_wallet::LightningSendStatus;
+
+    #[test]
+    fn tracks_each_payment_event_stream_until_completion_or_drop() {
+        let active_streams = Arc::new(AtomicUsize::new(0));
+        let (_first_sender, first_receiver) = tokio::sync::mpsc::channel(1);
+        let (_second_sender, second_receiver) = tokio::sync::mpsc::channel(1);
+        let first = PaymentEventStream::new(first_receiver, Arc::clone(&active_streams));
+        let second = PaymentEventStream::new(second_receiver, Arc::clone(&active_streams));
+
+        assert_eq!(active_streams.load(Ordering::Relaxed), 2);
+
+        first.activity.deactivate();
+        assert_eq!(active_streams.load(Ordering::Relaxed), 1);
+
+        drop(first);
+        assert_eq!(active_streams.load(Ordering::Relaxed), 1);
+
+        drop(second);
+        assert_eq!(active_streams.load(Ordering::Relaxed), 0);
+    }
 
     #[test]
     fn maps_terminal_send_statuses() {

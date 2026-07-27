@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Updated `cdk-common` and `cdk-payment-processor` from 0.16.0-rc.1 to 0.17.3
 - Raised the minimum supported Rust version to 1.88
+- BOLT11 settings now report multi-part payments as unsupported
 - Renamed `server_addr` and `server_port` to `address` and `port`, and `SERVER_ADDR` to `SERVER_ADDRESS`
 - Replaced `breez-sdk-spark` 0.12.1 with `spark-wallet` from Breez Spark SDK 0.19.0
 - Renamed the wallet mnemonic environment variable from `BREEZ_MNEMONIC` to `SPARK_MNEMONIC`
@@ -36,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The gRPC server now honors `tls_enable`, `tls_cert_path`, and `tls_key_path`
 - Removed the Breez API-key requirement
+- Incoming payment events require a valid Lightning payment hash instead of constructing a fallback hash
+- Incoming payment notifications and status checks report the received amount without adding fees
+- Payment event subscriptions now clean up their activity state when each stream ends or is dropped
 - Outgoing payments now report pending and failed states from the Spark SSP instead of always reporting paid
 - Outgoing payments use stable Spark transfer IDs for retry safety
 - Configuration mismatch between settings.rs and config.toml
