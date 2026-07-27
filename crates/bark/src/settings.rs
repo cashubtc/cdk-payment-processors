@@ -62,10 +62,6 @@ impl Default for BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend type identifier (e.g., "bark")
-    #[serde(default)]
-    pub backend_type: String,
-
     /// Backend-specific configuration
     #[serde(default)]
     pub backend: BackendConfig,
@@ -106,7 +102,6 @@ fn default_tls_key_path() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend_type: "bark".to_string(),
             backend: BackendConfig::default(),
             address: default_address(),
             port: default_port(),

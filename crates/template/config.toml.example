@@ -1,7 +1,5 @@
 # Copy this file to config.toml and fill in your values
 
-backend_type = "template"
-
 # gRPC server configuration
 address = "127.0.0.1"
 port = 50051

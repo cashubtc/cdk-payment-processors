@@ -55,7 +55,6 @@ Copy `config.toml.example` to `config.toml` in the directory where the
 processor is started, then edit it:
 
 ```toml
-backend_type = "spark"
 address = "127.0.0.1"
 port = 50051
 
