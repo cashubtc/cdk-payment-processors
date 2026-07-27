@@ -2,23 +2,25 @@
 name = "cdk-payment-processor-ldk-server"
 version = "0.1.0"
 edition = "2021"
+authors = ["Vincenzo Palazzo <vincenzopalazzodev@gmail.com>"]
 description = "CDK Payment Processor backed by an LDK Server node"
 license = "MIT"
 
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-bitcoin = { version = "0.32.2", features = ["base64", "serde", "rand", "rand-std"] }
 cdk-common = { version = "0.17.3", default-features = false, features = ["mint", "grpc"] }
 cdk-payment-processor = { version = "0.17.3", default-features = false }
 figment = { version = "0.10", features = ["env", "toml"] }
 futures = "0.3"
-ldk-server-client = { git = "https://github.com/lightningdevkit/ldk-server", rev = "50fe7523be3529d86bfee0dfc35df9a52aca7310", default-features = false }
-lightning = { version = "0.2.0", default-features = false, features = ["std"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
-tokio-util = "0.7"
 tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+bitcoin = { version = "0.32.2", features = ["base64", "serde", "rand", "rand-std"] }
+ldk-server-client = { git = "https://github.com/lightningdevkit/ldk-server", rev = "50fe7523be3529d86bfee0dfc35df9a52aca7310", default-features = false }
+lightning = { version = "0.2.0", default-features = false, features = ["std"] }
+tokio-util = "0.7"

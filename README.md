@@ -8,15 +8,17 @@ CDK Payment Processors (`MintPayment` interface over gRPC).
 ```text
 Cargo.toml       # Workspace manifest
 crates/
-├── bark/      # Payment processor backed by a Bark wallet
-├── spark/     # Payment processor backed by a Spark wallet
-└── template/  # Starting point for integrating a new payment backend
+├── bark/        # Payment processor backed by a Bark wallet
+├── ldk-server/  # Payment processor backed by an LDK Server node
+├── spark/       # Payment processor backed by a Spark wallet
+└── template/    # Starting point for integrating a new payment backend
 ```
 
 Each processor has its own `Cargo.toml`, configuration example, and
 documentation:
 
 - [Bark](crates/bark/README.md)
+- [LDK Server](crates/ldk-server/README.md)
 - [Spark](crates/spark/README.md)
 - [Template](crates/template/README.md)
 
@@ -30,6 +32,6 @@ cargo test --workspace
 Run an individual processor from its directory:
 
 ```bash
-cd crates/bark
+cd crates/template
 cargo run --release
 ```
