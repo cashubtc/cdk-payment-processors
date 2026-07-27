@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/bark",
+    "crates/ldk-server",
     "crates/spark",
     "crates/template",
 ]

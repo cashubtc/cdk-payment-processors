@@ -1,0 +1,24 @@
+# Copy this file to config.toml and fill in your values
+
+# gRPC server configuration (what cdk-mintd connects to)
+address = "127.0.0.1"
+port = 50071
+
+# TLS for the payment processor gRPC server (optional)
+tls_enable = false
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+
+# LDK Server node connection
+[backend]
+# gRPC address of the LDK Server node, without scheme
+address = "127.0.0.1:3536"
+# HMAC API key (64-char hex)
+api_key = "your-api-key-hex-here"
+# PEM certificate to pin for the LDK Server connection
+tls_cert_path = "certs/ldk-server.crt"
+
+# Melt quote fee reserve (defaults shown)
+fee_reserve_min_sat = 2
+fee_reserve_percent = 0.01
+max_payment_scan_pages = 32
