@@ -146,12 +146,12 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "ark-lib"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "350858a563e6b7675e32eacd598122e6222226b1cbc4c5f1ce9210344a124880"
+checksum = "d6e4dff3026c0497bb97cf226b65272b99829bc8974f110c9f0cd33b6fcdd0ce"
 dependencies = [
  "async-trait",
- "bark-bitcoin-ext",
+ "bark-bitcoin-ext 0.6.0",
  "bitcoin",
  "chrono",
  "getrandom 0.3.4",
@@ -348,6 +348,19 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "66b37e898a854bfab1f0cc74438c0209b11bea560ed8aa18f47e8b86582eb6d3"
 dependencies = [
+ "bitcoin",
+ "lazy_static",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
+name = "bark-bitcoin-ext"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f6fa1ffced1d1737594b44c4da504d355b5488c5af66681be547dc81043ecf8"
+dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
  "bitcoin",
@@ -361,9 +374,9 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d9c3c12fa217f4df13974cd6c79af2c0d905c5bc3153475b45e251b2dddce82"
+checksum = "e0283c763db8766fca5ded6c787bdb9c19cee70ec00e835d75cdc1ff8d5a82f0"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -380,14 +393,14 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b585e60338b58e4260fc1ec4003d765d15b1fe3da62da8a87cf4f76cc2f33637"
+checksum = "ab803542ab6400c2be9a75abc17a48024bebc844c12e08c64bccbad6353fb393"
 dependencies = [
  "anyhow",
  "ark-lib",
  "async-trait",
- "bark-bitcoin-ext",
+ "bark-bitcoin-ext 0.6.0",
  "bark-server-rpc",
  "bdk_bitcoind_rpc",
  "bdk_core",
@@ -532,7 +545,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f271e8045de1a54f03466b260a59633b902f3f3dc98967c5eaca2dac40b79e5"
 dependencies = [
- "bark-bitcoin-ext",
+ "bark-bitcoin-ext 0.5.0",
  "bitcoin",
  "lightning",
  "lightning-invoice 0.34.1",
@@ -934,7 +947,7 @@ dependencies = [
  "anyhow",
  "ark-lib",
  "async-trait",
- "bark-bitcoin-ext",
+ "bark-bitcoin-ext 0.6.0",
  "bark-wallet",
  "bip39",
  "bitcoin",
