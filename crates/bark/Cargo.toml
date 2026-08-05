@@ -20,9 +20,9 @@ tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
-ark-lib = "0.3.0"
-bark-bitcoin-ext = "0.3.0"
-bark-wallet = { version = "0.3.0", features = ["onchain-bdk"] }
+ark-lib = "0.5.0"
+bark-bitcoin-ext = "0.5.0"
+bark-wallet = { version = "0.5.0", features = ["onchain-bdk"] }
 bip39 = "2.2"
 bitcoin = "0.32"
 futures = "0.3"

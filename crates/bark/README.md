@@ -5,7 +5,7 @@ Lightning and on-chain Bitcoin payments through Ark.
 
 The service implements CDK's `MintPayment` interface using `bark-wallet` and
 runs it with `cdk-payment-processor`. It is currently built against CDK
-`0.17.3` and Bark `0.3.0`.
+`0.17.3` and Bark `0.5.0`.
 
 ## Supported payments
 
@@ -74,6 +74,11 @@ instances.
 On-chain deposits are reported after they have one confirmation and have been
 boarded into Ark. The amount reported to the mint is the received amount after
 the Bark boarding fee.
+
+Background payment polling rotates across Lightning and on-chain receives and
+sends. Each pass is bounded and its scan position is persisted, so a busy
+payment type or large state history cannot indefinitely delay other events,
+including after a restart.
 
 ## Run
 

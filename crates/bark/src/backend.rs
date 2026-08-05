@@ -10,10 +10,10 @@ use ark::lightning::PaymentHash;
 use ark::VtxoId;
 use async_trait::async_trait;
 use bark::onchain::bdk_wallet::TxOrdering;
-use bark::onchain::{ChainSync, GetAddress, GetWalletTx, OnchainWallet, PreparePsbt, SignPsbt};
+use bark::onchain::{OnchainWallet, OnchainWalletTrait};
 use bark::persist::sqlite::SqliteClient;
 use bark::persist::BarkPersister;
-use bitcoin::{Address, FeeRate, OutPoint, Psbt, Transaction, Txid};
+use bitcoin::{Address, FeeRate, OutPoint, Psbt, Txid};
 use cdk_common::amount::Amount;
 use cdk_common::nuts::nut30::MeltQuoteOnchainFeeOption;
 use cdk_common::nuts::CurrencyUnit;
@@ -38,7 +38,8 @@ const ONCHAIN_ESTIMATED_BLOCKS: u32 = 6;
 #[derive(Clone)]
 pub struct BarkBackend {
     wallet: Arc<bark::Wallet>,
-    onchain_wallet: Arc<tokio::sync::Mutex<OnchainWallet>>,
+    onchain_wallet: Arc<tokio::sync::RwLock<OnchainWallet>>,
+    onchain_receive_lock: Arc<tokio::sync::Mutex<()>>,
     onchain_send_lock: Arc<tokio::sync::Mutex<()>>,
     lightning_send_lock: Arc<tokio::sync::Mutex<()>>,
     state_store: Arc<BarkStateStore>,
@@ -61,9 +62,26 @@ const LIGHTNING_SEND_INTENTS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("lightning_send_intents");
 const COMPLETED_LIGHTNING_SENDS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("completed_lightning_sends");
+// Per-scan rotation cursors so capped scans resume where the last scan
+// stopped instead of restarting at the first key every tick.
+const SCAN_CURSOR_TABLE: TableDefinition<&str, &str> = TableDefinition::new("scan_cursors");
+const RECEIVE_SCAN_CURSOR_KEY: &str = "receive_scan";
+const LIGHTNING_RECEIVE_SCAN_CURSOR_KEY: &str = "lightning_receive_scan";
+const ONCHAIN_SEND_SCAN_CURSOR_KEY: &str = "onchain_send_scan";
+const LIGHTNING_SEND_SCAN_CURSOR_KEY: &str = "lightning_send_scan";
+const ONCHAIN_SEND_RECONCILE_CURSOR_KEY: &str = "onchain_send_reconcile";
+const LIGHTNING_SEND_RECONCILE_CURSOR_KEY: &str = "lightning_send_reconcile";
 
 const RETRY_BACKOFF_SECS: u64 = 30;
 const SEND_ATTEMPT_REVIEW_SECS: u64 = 60;
+// Bound the number of intents reconciled per event-stream tick so a large
+// backlog cannot starve the other event kinds indefinitely.
+const MAX_INTENTS_RECONCILED_PER_TICK: usize = 32;
+// Bound the number of records scanned while looking for one event so a large
+// reported backlog cannot starve unreported entries indefinitely.
+const MAX_RECEIVE_INTENTS_SCANNED_PER_TICK: usize = 64;
+const MAX_SEND_INTENTS_SCANNED_PER_TICK: usize = 64;
+const MAX_RECEIVE_QUOTES_SCANNED_PER_TICK: usize = 64;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OnchainReceiveIntentRecord {
@@ -81,7 +99,6 @@ enum OnchainReceiveIntentState {
     },
     BoardPreparing {
         attempt: u32,
-        attempt_id: String,
         started_at: u64,
     },
     Boarding {
@@ -207,6 +224,7 @@ impl BarkStateStore {
             tx.open_table(COMPLETED_SENDS_TABLE)?;
             tx.open_table(LIGHTNING_SEND_INTENTS_TABLE)?;
             tx.open_table(COMPLETED_LIGHTNING_SENDS_TABLE)?;
+            tx.open_table(SCAN_CURSOR_TABLE)?;
         }
         tx.commit()?;
         Ok(())
@@ -214,6 +232,76 @@ impl BarkStateStore {
 
     fn store_error(e: impl std::fmt::Display) -> cdk_common::payment::Error {
         cdk_common::payment::Error::Custom(format!("Onchain state store error: {}", e))
+    }
+
+    fn get_scan_cursor(&self, scan: &str) -> Result<Option<String>, cdk_common::payment::Error> {
+        let tx = self.db.begin_read().map_err(Self::store_error)?;
+        let table = tx
+            .open_table(SCAN_CURSOR_TABLE)
+            .map_err(Self::store_error)?;
+        Ok(table
+            .get(scan)
+            .map_err(Self::store_error)?
+            .map(|value| value.value().to_string()))
+    }
+
+    fn put_scan_cursor(&self, scan: &str, key: &str) -> Result<(), cdk_common::payment::Error> {
+        let tx = self.db.begin_write().map_err(Self::store_error)?;
+        {
+            let mut table = tx
+                .open_table(SCAN_CURSOR_TABLE)
+                .map_err(Self::store_error)?;
+            table.insert(scan, key).map_err(Self::store_error)?;
+        }
+        tx.commit().map_err(Self::store_error)
+    }
+
+    // Rotate `keys` so iteration starts at the first key after the stored
+    // cursor, wrapping to the beginning when needed. The cursor need not
+    // still exist among `keys`, which keeps filtered scans moving forward.
+    fn rotated_window(
+        &self,
+        scan: &str,
+        keys: Vec<String>,
+        max_scanned: usize,
+    ) -> Result<Vec<String>, cdk_common::payment::Error> {
+        if keys.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let cursor = self.get_scan_cursor(scan)?;
+        let start = cursor
+            .as_ref()
+            .and_then(|cursor| keys.iter().position(|key| key > cursor))
+            .unwrap_or(0);
+        let rotated: Vec<String> = keys
+            .iter()
+            .cycle()
+            .skip(start)
+            .take(keys.len().min(max_scanned))
+            .cloned()
+            .collect();
+        Ok(rotated)
+    }
+
+    fn rotated_records<T>(
+        &self,
+        scan: &str,
+        records: Vec<(String, T)>,
+        max_scanned: usize,
+    ) -> Result<Vec<(String, T)>, cdk_common::payment::Error> {
+        let mut records_by_key: HashMap<String, T> = records.into_iter().collect();
+        let mut keys: Vec<String> = records_by_key.keys().cloned().collect();
+        keys.sort();
+
+        let window = self.rotated_window(scan, keys, max_scanned)?;
+        let mut rotated = Vec::with_capacity(window.len());
+        for key in window {
+            if let Some(record) = records_by_key.remove(&key) {
+                rotated.push((key, record));
+            }
+        }
+        Ok(rotated)
     }
 
     fn put_receive_address(
@@ -305,26 +393,64 @@ impl BarkStateStore {
             .collect())
     }
 
+    // Scan for the next finalized, not-yet-reported receive, rotating the
+    // start position each call so a reported backlog cannot hide unreported
+    // records behind the `max_scanned` prefix. `advance` updates the stored
+    // cursor to the key of the intent being returned.
     fn next_unreported_finalized_receive(
         &self,
+        max_scanned: usize,
     ) -> Result<Option<OnchainReceiveIntentRecord>, cdk_common::payment::Error> {
-        for intent in self.receive_intents()? {
+        let intents = self.receive_intents()?;
+        let by_outpoint: HashMap<String, &OnchainReceiveIntentRecord> = intents
+            .iter()
+            .map(|intent| (intent.deposit_outpoint.clone(), intent))
+            .collect();
+        let mut keys: Vec<String> = by_outpoint.keys().cloned().collect();
+        keys.sort();
+        if keys.is_empty() {
+            return Ok(None);
+        }
+
+        let window = self.rotated_window(RECEIVE_SCAN_CURSOR_KEY, keys, max_scanned)?;
+        for outpoint in &window {
+            let intent = by_outpoint[outpoint];
             if matches!(intent.state, OnchainReceiveIntentState::Finalized { .. })
-                && !self.is_receive_reported(&intent.deposit_outpoint)?
+                && !self.is_receive_reported(outpoint)?
             {
-                return Ok(Some(intent));
+                return Ok(Some(intent.clone()));
             }
+        }
+        // Nothing unreported in this window; remember where we stopped so the
+        // next scan continues from here.
+        if let Some(last) = window.last() {
+            self.put_scan_cursor(RECEIVE_SCAN_CURSOR_KEY, last)?;
         }
         Ok(None)
     }
 
-    fn mark_receive_reported(&self, outpoint: &str) -> Result<(), cdk_common::payment::Error> {
+    fn advance_receive_scan_cursor(
+        &self,
+        outpoint: &str,
+    ) -> Result<(), cdk_common::payment::Error> {
+        self.put_scan_cursor(RECEIVE_SCAN_CURSOR_KEY, outpoint)
+    }
+
+    // Record that an onchain receive was delivered to the mint. The marker,
+    // the finalized intent, and the quote's receive address are all kept: the
+    // marker deduplicates event emission and caps the poll set, the intent
+    // lets status re-checks keep reporting the payment to the mint, and the
+    // address keeps detecting further deposits to the same amountless quote.
+    fn mark_onchain_receive_reported(
+        &self,
+        outpoint: &str,
+    ) -> Result<(), cdk_common::payment::Error> {
         let tx = self.db.begin_write().map_err(Self::store_error)?;
         {
-            let mut table = tx
+            let mut reported = tx
                 .open_table(REPORTED_RECEIVES_TABLE)
                 .map_err(Self::store_error)?;
-            table.insert(outpoint, "1").map_err(Self::store_error)?;
+            reported.insert(outpoint, "1").map_err(Self::store_error)?;
         }
         tx.commit().map_err(Self::store_error)
     }
@@ -368,21 +494,22 @@ impl BarkStateStore {
             .map(|value| value.value().to_string()))
     }
 
-    fn lightning_receive_quote_for_hash(
+    fn lightning_receive_quotes(
         &self,
-        payment_hash: &str,
-    ) -> Result<Option<String>, cdk_common::payment::Error> {
+    ) -> Result<Vec<(String, String)>, cdk_common::payment::Error> {
         let tx = self.db.begin_read().map_err(Self::store_error)?;
         let table = tx
             .open_table(LIGHTNING_RECEIVE_QUOTES_TABLE)
             .map_err(Self::store_error)?;
+        let mut quotes = Vec::new();
         for entry in table.iter().map_err(Self::store_error)? {
             let (quote_id, stored_hash) = entry.map_err(Self::store_error)?;
-            if stored_hash.value() == payment_hash {
-                return Ok(Some(quote_id.value().to_string()));
-            }
+            quotes.push((
+                quote_id.value().to_string(),
+                stored_hash.value().to_string(),
+            ));
         }
-        Ok(None)
+        Ok(quotes)
     }
 
     fn mark_lightning_receive_reported(
@@ -573,61 +700,22 @@ impl BarkStateStore {
     }
 }
 
-struct ScopedBoard<'a> {
-    inner: &'a mut OnchainWallet,
+// Build an unsigned board funding PSBT restricted to the given deposit UTXO.
+// The output is a full drain of the selected UTXO; the board fee and miner fee
+// are deducted from it.
+fn build_board_funding_psbt(
+    onchain: &mut OnchainWallet,
     outpoint: OutPoint,
-}
-
-impl PreparePsbt for ScopedBoard<'_> {
-    fn prepare_tx(
-        &mut self,
-        destinations: &[(Address, bitcoin::Amount)],
-        fee_rate: FeeRate,
-    ) -> anyhow::Result<Psbt> {
-        let mut builder = self.inner.build_tx();
-        builder.ordering(TxOrdering::Untouched);
-        builder.add_utxo(self.outpoint)?;
-        builder.manually_selected_only();
-        for (dest, amount) in destinations {
-            builder.add_recipient(dest.script_pubkey(), *amount);
-        }
-        builder.fee_rate(fee_rate);
-        builder.finish().map_err(Into::into)
-    }
-
-    fn prepare_drain_tx(
-        &mut self,
-        destination: Address,
-        fee_rate: FeeRate,
-    ) -> anyhow::Result<Psbt> {
-        let mut builder = self.inner.build_tx();
-        builder.ordering(TxOrdering::Untouched);
-        builder.add_utxo(self.outpoint)?;
-        builder.manually_selected_only();
-        builder.drain_to(destination.script_pubkey());
-        builder.fee_rate(fee_rate);
-        builder.finish().map_err(Into::into)
-    }
-}
-
-#[async_trait]
-impl SignPsbt for ScopedBoard<'_> {
-    async fn finish_psbt(&mut self, psbt: Psbt) -> anyhow::Result<Psbt> {
-        self.inner.finish_psbt(psbt).await
-    }
-}
-
-impl GetWalletTx for ScopedBoard<'_> {
-    fn get_wallet_tx(&self, txid: Txid) -> Option<Arc<Transaction>> {
-        self.inner.get_wallet_tx(txid)
-    }
-
-    fn get_wallet_tx_confirmed_block(
-        &self,
-        txid: Txid,
-    ) -> anyhow::Result<Option<bitcoin_ext::BlockRef>> {
-        self.inner.get_wallet_tx_confirmed_block(txid)
-    }
+    funding_address: &Address,
+    fee_rate: FeeRate,
+) -> anyhow::Result<Psbt> {
+    let mut builder = onchain.build_tx();
+    builder.ordering(TxOrdering::Untouched);
+    builder.add_utxo(outpoint)?;
+    builder.manually_selected_only();
+    builder.drain_to(funding_address.script_pubkey());
+    builder.fee_rate(fee_rate);
+    builder.finish().map_err(Into::into)
 }
 
 impl BarkBackend {
@@ -672,10 +760,13 @@ impl BarkBackend {
                 .map_err(|e| anyhow::anyhow!("Failed to open SQLite database: {}", e))?,
         );
 
-        let mut onchain_wallet =
+        let onchain_wallet =
             OnchainWallet::load_or_create(network, mnemonic.to_seed(""), db.clone())
                 .await
                 .map_err(|e| anyhow::anyhow!("Failed to load onchain wallet: {}", e))?;
+        let onchain_wallet = Arc::new(tokio::sync::RwLock::new(onchain_wallet));
+        let bark_onchain_wallet: Arc<tokio::sync::RwLock<dyn OnchainWalletTrait>> =
+            onchain_wallet.clone();
 
         let wallet = bark::Wallet::open(
             network,
@@ -685,6 +776,7 @@ impl BarkBackend {
                 run_daemon: false,
                 datadir: Some(data_dir.clone()),
                 persister: Some(db),
+                onchain: Some(bark_onchain_wallet),
                 ..Default::default()
             },
         )
@@ -692,6 +784,8 @@ impl BarkBackend {
         .map_err(|e| anyhow::anyhow!("Failed to open or create wallet: {}", e))?;
 
         onchain_wallet
+            .write()
+            .await
             .sync(wallet.chain())
             .await
             .map_err(|e| anyhow::anyhow!("Failed to sync onchain wallet: {}", e))?;
@@ -709,7 +803,8 @@ impl BarkBackend {
 
         Ok(Self {
             wallet: Arc::new(wallet),
-            onchain_wallet: Arc::new(tokio::sync::Mutex::new(onchain_wallet)),
+            onchain_wallet,
+            onchain_receive_lock: Arc::new(tokio::sync::Mutex::new(())),
             onchain_send_lock: Arc::new(tokio::sync::Mutex::new(())),
             lightning_send_lock: Arc::new(tokio::sync::Mutex::new(())),
             state_store,
@@ -732,6 +827,12 @@ impl BarkBackend {
     }
 
     async fn process_onchain_receive_boards(&self) -> Result<(), cdk_common::payment::Error> {
+        // Best effort: skip this round if another caller is already processing
+        // so status checks do not queue behind a slow event-stream tick.
+        let Ok(_receive_guard) = self.onchain_receive_lock.try_lock() else {
+            return Ok(());
+        };
+
         if let Err(e) = self.wallet.sync_pending_boards().await {
             debug!("Failed to sync pending boards: {}", e);
         }
@@ -740,7 +841,7 @@ impl BarkBackend {
             cdk_common::payment::Error::Custom(format!("Failed to get chain tip: {}", e))
         })?;
 
-        let mut onchain = self.onchain_wallet.lock().await;
+        let mut onchain = self.onchain_wallet.write().await;
         onchain.sync(self.wallet.chain()).await.map_err(|e| {
             cdk_common::payment::Error::Custom(format!("Failed to sync onchain wallet: {}", e))
         })?;
@@ -749,7 +850,9 @@ impl BarkBackend {
         self.finalize_spendable_receive_boards().await?;
         self.detect_confirmed_receive_deposits(&onchain, tip)
             .await?;
-        self.start_ready_receive_boards(&mut onchain).await
+        drop(onchain);
+
+        self.start_ready_receive_boards().await
     }
 
     async fn detect_confirmed_receive_deposits(
@@ -791,12 +894,13 @@ impl BarkBackend {
                 continue;
             }
 
-            QuoteId::from_str(quote_id_str).map_err(|e| {
-                cdk_common::payment::Error::Custom(format!(
-                    "Invalid stored quote id {}: {}",
+            if let Err(e) = QuoteId::from_str(quote_id_str) {
+                warn!(
+                    "Skipping onchain deposit for invalid stored quote id {}: {}",
                     quote_id_str, e
-                ))
-            })?;
+                );
+                continue;
+            }
 
             let intent = OnchainReceiveIntentRecord {
                 quote_id: quote_id_str.clone(),
@@ -817,10 +921,7 @@ impl BarkBackend {
         Ok(())
     }
 
-    async fn start_ready_receive_boards(
-        &self,
-        onchain: &mut OnchainWallet,
-    ) -> Result<(), cdk_common::payment::Error> {
+    async fn start_ready_receive_boards(&self) -> Result<(), cdk_common::payment::Error> {
         let now = Self::unix_now();
         for intent in self.state_store.receive_intents()? {
             let (attempt, ready) = match &intent.state {
@@ -837,30 +938,32 @@ impl BarkBackend {
                 continue;
             }
 
-            let outpoint = OutPoint::from_str(&intent.deposit_outpoint).map_err(|e| {
-                cdk_common::payment::Error::Custom(format!(
-                    "Invalid stored deposit outpoint {}: {}",
-                    intent.deposit_outpoint, e
-                ))
-            })?;
+            let outpoint = match OutPoint::from_str(&intent.deposit_outpoint) {
+                Ok(outpoint) => outpoint,
+                Err(e) => {
+                    warn!(
+                        "Skipping receive intent with invalid stored deposit outpoint {}: {}",
+                        intent.deposit_outpoint, e
+                    );
+                    continue;
+                }
+            };
 
-            let attempt_id = uuid::Uuid::new_v4().to_string();
             let started_at = Self::unix_now();
             let mut preparing = intent.clone();
             preparing.state = OnchainReceiveIntentState::BoardPreparing {
                 attempt,
-                attempt_id,
                 started_at,
             };
             self.state_store.put_receive_intent(&preparing)?;
 
-            let board_result = {
-                let mut scoped_board = ScopedBoard {
-                    inner: onchain,
-                    outpoint,
-                };
-                self.wallet.board_all(&mut scoped_board).await
-            };
+            let board_result = self.board_deposit(outpoint).await;
+            let onchain = self.onchain_wallet.read().await;
+            let target_still_unspent = onchain
+                .list_unspent()
+                .iter()
+                .any(|output| output.outpoint == outpoint);
+            drop(onchain);
 
             match board_result {
                 Ok(pending_board) => {
@@ -904,11 +1007,7 @@ impl BarkBackend {
                             started_at,
                         );
                         self.state_store.put_receive_intent(&board_intent)?;
-                    } else if onchain
-                        .list_unspent()
-                        .iter()
-                        .any(|output| output.outpoint == outpoint)
-                    {
+                    } else if target_still_unspent {
                         let mut failed = preparing;
                         failed.state = OnchainReceiveIntentState::RetryableFailed {
                             attempt,
@@ -949,12 +1048,16 @@ impl BarkBackend {
                 continue;
             };
 
-            let outpoint = OutPoint::from_str(&intent.deposit_outpoint).map_err(|e| {
-                cdk_common::payment::Error::Custom(format!(
-                    "Invalid stored deposit outpoint {}: {}",
-                    intent.deposit_outpoint, e
-                ))
-            })?;
+            let outpoint = match OutPoint::from_str(&intent.deposit_outpoint) {
+                Ok(outpoint) => outpoint,
+                Err(e) => {
+                    warn!(
+                        "Skipping receive intent with invalid stored deposit outpoint {}: {}",
+                        intent.deposit_outpoint, e
+                    );
+                    continue;
+                }
+            };
 
             if let Some(pending_board) = self.pending_board_spending_outpoint(outpoint).await? {
                 let recovered =
@@ -1039,6 +1142,30 @@ impl BarkBackend {
         Ok(())
     }
 
+    // Board a single confirmed deposit UTXO by building and signing the funding
+    // transaction locally, then handing it to Bark via `board_tx`. This keeps
+    // per-quote accounting exact: only the selected outpoint is spent.
+    async fn board_deposit(
+        &self,
+        outpoint: OutPoint,
+    ) -> Result<bark::persist::models::PendingBoard, anyhow::Error> {
+        let (user_keypair, _) = self.wallet.derive_store_next_keypair().await?;
+        let (funding_address, expiry_height) =
+            self.wallet.board_funding_address(&user_keypair).await?;
+        let fee_rate = self.wallet.chain().fee_rates().await.regular;
+
+        let signed_psbt = {
+            let mut onchain = self.onchain_wallet.write().await;
+            let psbt =
+                build_board_funding_psbt(&mut onchain, outpoint, &funding_address, fee_rate)?;
+            OnchainWalletTrait::finish_psbt(&mut *onchain, psbt).await?
+        };
+
+        self.wallet
+            .board_tx(signed_psbt, user_keypair, expiry_height)
+            .await
+    }
+
     async fn pending_board_spending_outpoint(
         &self,
         outpoint: OutPoint,
@@ -1113,7 +1240,7 @@ impl BarkBackend {
 
         if mark_reported && !responses.is_empty() {
             for (outpoint, _) in &responses {
-                self.state_store.mark_receive_reported(outpoint)?;
+                self.state_store.mark_onchain_receive_reported(outpoint)?;
             }
         }
 
@@ -1128,16 +1255,23 @@ impl BarkBackend {
     ) -> Result<Option<Event>, cdk_common::payment::Error> {
         self.process_onchain_receive_boards().await?;
 
-        let Some(receive) = self.state_store.next_unreported_finalized_receive()? else {
+        let Some(receive) = self
+            .state_store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)?
+        else {
             return Ok(None);
         };
 
-        let quote_id = QuoteId::from_str(&receive.quote_id).map_err(|e| {
-            cdk_common::payment::Error::Custom(format!(
-                "Invalid stored quote id {}: {}",
-                receive.quote_id, e
-            ))
-        })?;
+        let quote_id = match QuoteId::from_str(&receive.quote_id) {
+            Ok(quote_id) => quote_id,
+            Err(e) => {
+                warn!(
+                    "Skipping finalized receive with invalid stored quote id {}: {}",
+                    receive.quote_id, e
+                );
+                return Ok(None);
+            }
+        };
 
         let OnchainReceiveIntentState::Finalized {
             board_txid,
@@ -1148,20 +1282,32 @@ impl BarkBackend {
             return Ok(None);
         };
 
-        self.state_store
-            .mark_receive_reported(&receive.deposit_outpoint)?;
-
-        Ok(Some(Event::PaymentReceived(WaitPaymentResponse {
+        let response = WaitPaymentResponse {
             payment_identifier: PaymentIdentifier::QuoteId(quote_id),
             payment_amount: Amount::new(amount_sat, CurrencyUnit::Sat),
             payment_id: board_txid,
-        })))
+        };
+
+        self.state_store
+            .mark_onchain_receive_reported(&receive.deposit_outpoint)?;
+        self.state_store
+            .advance_receive_scan_cursor(&receive.deposit_outpoint)?;
+
+        Ok(Some(Event::PaymentReceived(response)))
     }
 
     async fn next_onchain_send_event(&self) -> Result<Option<Event>, cdk_common::payment::Error> {
         self.reconcile_onchain_sends().await?;
 
-        for (quote_id_str, send) in self.state_store.sends()? {
+        let sends = self.state_store.sends()?;
+        let window = self.state_store.rotated_records(
+            ONCHAIN_SEND_SCAN_CURSOR_KEY,
+            sends,
+            MAX_SEND_INTENTS_SCANNED_PER_TICK,
+        )?;
+        let mut last_scanned: Option<String> = None;
+        for (quote_id_str, send) in window {
+            last_scanned = Some(quote_id_str.clone());
             if self.state_store.is_send_completed(&quote_id_str)? {
                 continue;
             }
@@ -1170,17 +1316,19 @@ impl BarkBackend {
                 continue;
             };
 
-            let quote_id = QuoteId::from_str(&quote_id_str).map_err(|e| {
-                cdk_common::payment::Error::Custom(format!(
-                    "Invalid stored quote id {}: {}",
-                    quote_id_str, e
-                ))
-            })?;
-
-            self.state_store.mark_send_completed(&quote_id_str)?;
+            let quote_id = match QuoteId::from_str(&quote_id_str) {
+                Ok(quote_id) => quote_id,
+                Err(e) => {
+                    warn!(
+                        "Skipping onchain send with invalid stored quote id {}: {}",
+                        quote_id_str, e
+                    );
+                    continue;
+                }
+            };
 
             let total_spent = send.amount_sat.saturating_add(*fee_sat);
-            return Ok(Some(Event::PaymentSuccessful {
+            let event = Event::PaymentSuccessful {
                 quote_id: quote_id.clone(),
                 details: MakePaymentResponse {
                     payment_lookup_id: PaymentIdentifier::QuoteId(quote_id),
@@ -1188,9 +1336,17 @@ impl BarkBackend {
                     status: MeltQuoteState::Paid,
                     total_spent: Amount::new(total_spent, CurrencyUnit::Sat),
                 },
-            }));
+            };
+            self.state_store.mark_send_completed(&quote_id_str)?;
+            self.state_store
+                .put_scan_cursor(ONCHAIN_SEND_SCAN_CURSOR_KEY, &quote_id_str)?;
+            return Ok(Some(event));
         }
 
+        if let Some(last) = last_scanned {
+            self.state_store
+                .put_scan_cursor(ONCHAIN_SEND_SCAN_CURSOR_KEY, &last)?;
+        }
         Ok(None)
     }
 
@@ -1199,10 +1355,20 @@ impl BarkBackend {
         quote_id: &QuoteId,
         mark_completed: bool,
     ) -> Result<Option<MakePaymentResponse>, cdk_common::payment::Error> {
-        self.reconcile_onchain_sends().await?;
-
         let quote_id_str = quote_id.to_string();
-        let send = self.state_store.get_send(&quote_id_str)?;
+        let send = match self.onchain_send_lock.try_lock() {
+            Ok(_send_guard) => match self.reconcile_onchain_send(&quote_id_str).await {
+                Ok(send) => send,
+                Err(e) => {
+                    warn!(
+                        "Failed to reconcile onchain send {} during status check: {}",
+                        quote_id_str, e
+                    );
+                    self.state_store.get_send(&quote_id_str)?
+                }
+            },
+            Err(_) => self.state_store.get_send(&quote_id_str)?,
+        };
         let Some(send) = send else {
             return Ok(None);
         };
@@ -1214,62 +1380,147 @@ impl BarkBackend {
         )?))
     }
 
-    async fn reconcile_onchain_sends(&self) -> Result<(), cdk_common::payment::Error> {
+    fn onchain_send_needs_reconciliation(send: &OnchainSendIntentRecord, now: u64) -> bool {
+        match &send.state {
+            OnchainSendIntentState::Attempting { started_at, .. } => {
+                started_at.saturating_add(SEND_ATTEMPT_REVIEW_SECS) <= now
+            }
+            OnchainSendIntentState::Broadcast { .. } => true,
+            OnchainSendIntentState::NeedsReview { .. }
+            | OnchainSendIntentState::Confirmed { .. } => false,
+        }
+    }
+
+    async fn reconcile_onchain_send(
+        &self,
+        quote_id_str: &str,
+    ) -> Result<Option<OnchainSendIntentRecord>, cdk_common::payment::Error> {
+        let Some(send) = self.state_store.get_send(quote_id_str)? else {
+            return Ok(None);
+        };
+
+        let now = Self::unix_now();
+        if !Self::onchain_send_needs_reconciliation(&send, now) {
+            return Ok(Some(send));
+        }
+
         if let Err(e) = self.wallet.sync_pending_offboards().await {
             debug!("Failed to sync pending offboards: {}", e);
         }
 
-        let now = Self::unix_now();
-        for (quote_id_str, send) in self.state_store.sends()? {
-            match &send.state {
-                OnchainSendIntentState::Attempting {
-                    fee_sat,
-                    started_at,
-                    ..
-                } if started_at.saturating_add(SEND_ATTEMPT_REVIEW_SECS) <= now => {
-                    let mut needs_review = send.clone();
-                    needs_review.state = OnchainSendIntentState::NeedsReview {
-                        reason: "Interrupted during Bark send_onchain; pending offboards are not exposed by the public Bark API for automatic recovery".to_string(),
-                        fee_sat: Some(*fee_sat),
-                        failed_at: now,
-                    };
-                    self.state_store.put_send(&quote_id_str, &needs_review)?;
-                    warn!(
-                        "Marked onchain send quote {} as needs_review after interrupted Bark send_onchain",
-                        quote_id_str
-                    );
-                }
-                OnchainSendIntentState::Broadcast { txid, fee_sat, .. } => {
-                    let parsed_txid = Txid::from_str(txid).map_err(|e| {
-                        cdk_common::payment::Error::Custom(format!(
-                            "Invalid stored offboard txid {}: {}",
-                            txid, e
-                        ))
-                    })?;
+        self.reconcile_onchain_send_record(quote_id_str, send, now)
+            .await
+            .map(Some)
+    }
 
-                    match self.wallet.chain().tx_status(parsed_txid).await {
-                        Ok(bitcoin_ext::TxStatus::Confirmed(_)) => {
-                            let mut confirmed = send.clone();
-                            confirmed.state = OnchainSendIntentState::Confirmed {
-                                txid: txid.clone(),
-                                fee_sat: *fee_sat,
-                                confirmed_at: now,
-                            };
-                            self.state_store.put_send(&quote_id_str, &confirmed)?;
-                            info!("Confirmed onchain send {} for quote {}", txid, quote_id_str);
-                        }
-                        Ok(bitcoin_ext::TxStatus::Mempool)
-                        | Ok(bitcoin_ext::TxStatus::NotFound) => {}
-                        Err(e) => {
-                            debug!("Failed to check onchain tx status for {}: {}", txid, e);
-                        }
-                    }
-                }
-                _ => {}
+    async fn reconcile_onchain_sends(&self) -> Result<(), cdk_common::payment::Error> {
+        let Ok(_send_guard) = self.onchain_send_lock.try_lock() else {
+            return Ok(());
+        };
+
+        let now = Self::unix_now();
+        let sends = self
+            .state_store
+            .sends()?
+            .into_iter()
+            .filter(|(_, send)| Self::onchain_send_needs_reconciliation(send, now))
+            .collect();
+        let window = self.state_store.rotated_records(
+            ONCHAIN_SEND_RECONCILE_CURSOR_KEY,
+            sends,
+            MAX_INTENTS_RECONCILED_PER_TICK,
+        )?;
+        if window.is_empty() {
+            return Ok(());
+        }
+
+        if let Err(e) = self.wallet.sync_pending_offboards().await {
+            debug!("Failed to sync pending offboards: {}", e);
+        }
+
+        let last_reconciled = window.last().map(|(quote_id, _)| quote_id.clone());
+        for (quote_id_str, send) in window {
+            if let Err(e) = self
+                .reconcile_onchain_send_record(&quote_id_str, send, now)
+                .await
+            {
+                warn!(
+                    "Failed to reconcile onchain send {} during bounded scan: {}",
+                    quote_id_str, e
+                );
             }
         }
 
+        if let Some(last_reconciled) = last_reconciled {
+            self.state_store
+                .put_scan_cursor(ONCHAIN_SEND_RECONCILE_CURSOR_KEY, &last_reconciled)?;
+        }
+
         Ok(())
+    }
+
+    async fn reconcile_onchain_send_record(
+        &self,
+        quote_id_str: &str,
+        send: OnchainSendIntentRecord,
+        now: u64,
+    ) -> Result<OnchainSendIntentRecord, cdk_common::payment::Error> {
+        match &send.state {
+            OnchainSendIntentState::Attempting {
+                fee_sat,
+                started_at,
+                ..
+            } if started_at.saturating_add(SEND_ATTEMPT_REVIEW_SECS) <= now => {
+                let mut needs_review = send.clone();
+                needs_review.state = OnchainSendIntentState::NeedsReview {
+                    reason: "Interrupted during Bark send_onchain; pending offboards are not exposed by the public Bark API for automatic recovery".to_string(),
+                    fee_sat: Some(*fee_sat),
+                    failed_at: now,
+                };
+                self.state_store.put_send(quote_id_str, &needs_review)?;
+                warn!(
+                    "Marked onchain send quote {} as needs_review after interrupted Bark send_onchain",
+                    quote_id_str
+                );
+                Ok(needs_review)
+            }
+            OnchainSendIntentState::Attempting { .. } => Ok(send),
+            OnchainSendIntentState::Broadcast { txid, fee_sat, .. } => {
+                let parsed_txid = match Txid::from_str(txid) {
+                    Ok(parsed_txid) => parsed_txid,
+                    Err(e) => {
+                        warn!(
+                            "Skipping onchain send with invalid stored offboard txid {}: {}",
+                            txid, e
+                        );
+                        return Ok(send);
+                    }
+                };
+
+                match self.wallet.chain().tx_status(parsed_txid).await {
+                    Ok(bitcoin_ext::TxStatus::Confirmed(_)) => {
+                        let mut confirmed = send.clone();
+                        confirmed.state = OnchainSendIntentState::Confirmed {
+                            txid: txid.clone(),
+                            fee_sat: *fee_sat,
+                            confirmed_at: now,
+                        };
+                        self.state_store.put_send(quote_id_str, &confirmed)?;
+                        info!("Confirmed onchain send {} for quote {}", txid, quote_id_str);
+                        Ok(confirmed)
+                    }
+                    Ok(bitcoin_ext::TxStatus::Mempool) | Ok(bitcoin_ext::TxStatus::NotFound) => {
+                        Ok(send)
+                    }
+                    Err(e) => {
+                        debug!("Failed to check onchain tx status for {}: {}", txid, e);
+                        Ok(send)
+                    }
+                }
+            }
+            OnchainSendIntentState::NeedsReview { .. }
+            | OnchainSendIntentState::Confirmed { .. } => Ok(send),
+        }
     }
 
     fn onchain_send_response(
@@ -1305,9 +1556,42 @@ impl BarkBackend {
         })
     }
 
+    fn lightning_send_needs_reconciliation(send: &LightningSendIntentRecord) -> bool {
+        !matches!(
+            &send.state,
+            LightningSendIntentState::Paid { .. } | LightningSendIntentState::Failed { .. }
+        )
+    }
+
     async fn reconcile_lightning_sends(&self) -> Result<(), cdk_common::payment::Error> {
-        for (payment_hash, _) in self.state_store.lightning_sends()? {
-            self.reconcile_lightning_send(&payment_hash).await?;
+        let Ok(_lightning_guard) = self.lightning_send_lock.try_lock() else {
+            return Ok(());
+        };
+
+        let sends = self
+            .state_store
+            .lightning_sends()?
+            .into_iter()
+            .filter(|(_, send)| Self::lightning_send_needs_reconciliation(send))
+            .collect();
+        let window = self.state_store.rotated_records(
+            LIGHTNING_SEND_RECONCILE_CURSOR_KEY,
+            sends,
+            MAX_INTENTS_RECONCILED_PER_TICK,
+        )?;
+
+        let last_reconciled = window.last().map(|(payment_hash, _)| payment_hash.clone());
+        for (payment_hash, _) in window {
+            if let Err(e) = self.reconcile_lightning_send(&payment_hash).await {
+                warn!(
+                    "Failed to reconcile lightning send {} during bounded scan: {}",
+                    payment_hash, e
+                );
+            }
+        }
+        if let Some(last_reconciled) = last_reconciled {
+            self.state_store
+                .put_scan_cursor(LIGHTNING_SEND_RECONCILE_CURSOR_KEY, &last_reconciled)?;
         }
         Ok(())
     }
@@ -1368,7 +1652,15 @@ impl BarkBackend {
     async fn next_lightning_send_event(&self) -> Result<Option<Event>, cdk_common::payment::Error> {
         self.reconcile_lightning_sends().await?;
 
-        for (payment_hash, send) in self.state_store.lightning_sends()? {
+        let sends = self.state_store.lightning_sends()?;
+        let window = self.state_store.rotated_records(
+            LIGHTNING_SEND_SCAN_CURSOR_KEY,
+            sends,
+            MAX_SEND_INTENTS_SCANNED_PER_TICK,
+        )?;
+        let mut last_scanned: Option<String> = None;
+        for (payment_hash, send) in window {
+            last_scanned = Some(payment_hash.clone());
             if self
                 .state_store
                 .is_lightning_send_completed(&payment_hash)?
@@ -1376,17 +1668,23 @@ impl BarkBackend {
                 continue;
             }
 
-            let quote_id = QuoteId::from_str(&send.quote_id).map_err(|e| {
-                cdk_common::payment::Error::Custom(format!(
-                    "Invalid stored quote id {}: {}",
-                    send.quote_id, e
-                ))
-            })?;
+            let quote_id = match QuoteId::from_str(&send.quote_id) {
+                Ok(quote_id) => quote_id,
+                Err(e) => {
+                    warn!(
+                        "Skipping lightning send with invalid stored quote id {}: {}",
+                        send.quote_id, e
+                    );
+                    continue;
+                }
+            };
 
             match &send.state {
                 LightningSendIntentState::Paid { .. } => {
                     self.state_store
                         .mark_lightning_send_completed(&payment_hash)?;
+                    self.state_store
+                        .put_scan_cursor(LIGHTNING_SEND_SCAN_CURSOR_KEY, &payment_hash)?;
                     return Ok(Some(Event::PaymentSuccessful {
                         quote_id: quote_id.clone(),
                         details: self.lightning_send_response_with_lookup(
@@ -1399,6 +1697,8 @@ impl BarkBackend {
                 LightningSendIntentState::Failed { reason, .. } => {
                     self.state_store
                         .mark_lightning_send_completed(&payment_hash)?;
+                    self.state_store
+                        .put_scan_cursor(LIGHTNING_SEND_SCAN_CURSOR_KEY, &payment_hash)?;
                     return Ok(Some(Event::PaymentFailed {
                         quote_id,
                         reason: reason.clone(),
@@ -1408,6 +1708,10 @@ impl BarkBackend {
             }
         }
 
+        if let Some(last) = last_scanned {
+            self.state_store
+                .put_scan_cursor(LIGHTNING_SEND_SCAN_CURSOR_KEY, &last)?;
+        }
         Ok(None)
     }
 
@@ -1494,52 +1798,113 @@ impl BarkBackend {
         Amount::new(amount.to_sat(), CurrencyUnit::Sat)
     }
 
-    /// Convert bitcoin::Amount to CDK Amount (static method)
-    fn btc_amount_to_cdk_static(amount: bitcoin::Amount) -> Amount<CurrencyUnit> {
-        Amount::new(amount.to_sat(), CurrencyUnit::Sat)
-    }
-
-    /// Get zero CDK amount
-    fn cdk_amount_zero() -> Amount<CurrencyUnit> {
-        Amount::new(0, CurrencyUnit::Sat)
-    }
-
     async fn check_lightning_receive(
         &self,
         payment_identifier: PaymentIdentifier,
         payment_hash: PaymentHash,
         mark_reported: bool,
     ) -> Result<Vec<WaitPaymentResponse>, cdk_common::payment::Error> {
-        let receive = self
+        let state = self
             .wallet
-            .lightning_receive_status(payment_hash)
+            .lightning_receive_state(payment_hash)
             .await
             .map_err(|e| {
                 cdk_common::payment::Error::Custom(format!("Failed to check receive status: {}", e))
             })?;
 
-        if let Some(receive) = receive {
-            if receive.finished_at.is_some() {
-                let amount = receive
-                    .invoice
-                    .amount_milli_satoshis()
-                    .map(|msat| self.btc_amount_to_cdk(bitcoin::Amount::from_sat(msat / 1000)))
-                    .unwrap_or(Self::cdk_amount_zero());
-
-                let payment_hash_bytes: [u8; 32] = payment_hash.into();
-                if mark_reported {
-                    self.state_store
-                        .mark_lightning_receive_reported(&payment_identifier.to_string())?;
-                }
-                return Ok(vec![WaitPaymentResponse {
-                    payment_identifier,
-                    payment_amount: amount,
-                    payment_id: hex::encode(payment_hash_bytes),
-                }]);
+        if let bark::actions::lightning::receive::LightningReceiveState::Settled(receive) = state {
+            let amount = self.btc_amount_to_cdk(receive.amount);
+            let payment_hash_bytes: [u8; 32] = payment_hash.into();
+            let response = WaitPaymentResponse {
+                payment_amount: amount,
+                payment_id: hex::encode(payment_hash_bytes),
+                payment_identifier,
+            };
+            if mark_reported {
+                self.state_store
+                    .mark_lightning_receive_reported(&response.payment_identifier.to_string())?;
             }
+            return Ok(vec![response]);
         }
 
         Ok(vec![])
+    }
+
+    async fn next_lightning_receive_event(
+        &self,
+    ) -> Result<Option<Event>, cdk_common::payment::Error> {
+        let quotes = self.state_store.lightning_receive_quotes()?;
+        let window = self.state_store.rotated_records(
+            LIGHTNING_RECEIVE_SCAN_CURSOR_KEY,
+            quotes,
+            MAX_RECEIVE_QUOTES_SCANNED_PER_TICK,
+        )?;
+        let mut last_scanned: Option<String> = None;
+        for (quote_id_str, payment_hash_hex) in window {
+            last_scanned = Some(quote_id_str.clone());
+            let quote_id = match QuoteId::from_str(&quote_id_str) {
+                Ok(quote_id) => quote_id,
+                Err(e) => {
+                    warn!(
+                        "Skipping lightning receive quote with invalid stored quote id {}: {}",
+                        quote_id_str, e
+                    );
+                    continue;
+                }
+            };
+            let payment_identifier = PaymentIdentifier::QuoteId(quote_id);
+            let request_lookup_id = payment_identifier.to_string();
+            if self
+                .state_store
+                .is_lightning_receive_reported(&request_lookup_id)?
+            {
+                continue;
+            }
+
+            let payment_hash_bytes = match Self::parse_payment_hash_hex(&payment_hash_hex) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    warn!("Skipping lightning receive quote {}: {}", quote_id_str, e);
+                    continue;
+                }
+            };
+            let state = match self
+                .wallet
+                .lightning_receive_state(PaymentHash::from(payment_hash_bytes))
+                .await
+            {
+                Ok(state) => state,
+                Err(e) => {
+                    debug!(
+                        "Failed to check lightning receive {}: {}",
+                        payment_hash_hex, e
+                    );
+                    continue;
+                }
+            };
+            let bark::actions::lightning::receive::LightningReceiveState::Settled(receive) = state
+            else {
+                continue;
+            };
+
+            let response = WaitPaymentResponse {
+                payment_identifier,
+                payment_amount: self.btc_amount_to_cdk(receive.amount),
+                payment_id: payment_hash_hex,
+            };
+
+            self.state_store
+                .mark_lightning_receive_reported(&request_lookup_id)?;
+            self.state_store
+                .put_scan_cursor(LIGHTNING_RECEIVE_SCAN_CURSOR_KEY, &quote_id_str)?;
+            return Ok(Some(Event::PaymentReceived(response)));
+        }
+
+        if let Some(last) = last_scanned {
+            self.state_store
+                .put_scan_cursor(LIGHTNING_RECEIVE_SCAN_CURSOR_KEY, &last)?;
+        }
+        Ok(None)
     }
 
     fn unix_now() -> u64 {
@@ -1583,7 +1948,7 @@ impl MintPayment for BarkBackend {
             IncomingPaymentOptions::Bolt11(opts) => Some(opts),
             IncomingPaymentOptions::Onchain(opts) => {
                 let address = {
-                    let mut onchain = self.onchain_wallet.lock().await;
+                    let mut onchain = self.onchain_wallet.write().await;
                     onchain.sync(self.wallet.chain()).await.map_err(|e| {
                         cdk_common::payment::Error::Custom(format!(
                             "Failed to sync onchain wallet: {}",
@@ -1635,7 +2000,7 @@ impl MintPayment for BarkBackend {
         // Generate BOLT11 invoice using bark wallet
         let invoice = self
             .wallet
-            .bolt11_invoice(amount, bolt11_options.description)
+            .bolt11_invoice(amount, bolt11_options.description, None)
             .await
             .map_err(|e| {
                 cdk_common::payment::Error::Custom(format!("Failed to create invoice: {}", e))
@@ -1780,11 +2145,34 @@ impl MintPayment for BarkBackend {
                 }
 
                 let _send_guard = self.onchain_send_lock.lock().await;
-                self.reconcile_onchain_sends().await?;
-
                 let quote_id_str = opts.quote_id.to_string();
-                if let Some(existing_send) = self.state_store.get_send(&quote_id_str)? {
-                    return self.onchain_send_response(&opts.quote_id, &existing_send, false);
+                match self.reconcile_onchain_send(&quote_id_str).await {
+                    Ok(Some(existing_send)) => {
+                        return self.onchain_send_response(&opts.quote_id, &existing_send, false);
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        warn!(
+                            "Failed to reconcile existing onchain send for quote {}: {}",
+                            quote_id_str, e
+                        );
+                        match self.state_store.get_send(&quote_id_str) {
+                            Ok(Some(existing_send)) => {
+                                return self.onchain_send_response(
+                                    &opts.quote_id,
+                                    &existing_send,
+                                    false,
+                                );
+                            }
+                            Ok(None) => {}
+                            Err(e) => {
+                                warn!(
+                                    "Failed to look up existing onchain send for quote {}: {}",
+                                    quote_id_str, e
+                                );
+                            }
+                        }
+                    }
                 }
 
                 let address = self.parse_bitcoin_address(&opts.address)?;
@@ -1898,26 +2286,48 @@ impl MintPayment for BarkBackend {
         }
 
         let _lightning_send_guard = self.lightning_send_lock.lock().await;
-        if let Some((existing_payment_hash, _)) =
-            self.state_store.lightning_send_for_quote(&quote_id_str)?
-        {
-            if let Some(existing_send) = self
-                .reconcile_lightning_send(&existing_payment_hash)
-                .await?
-            {
+        match self.state_store.lightning_send_for_quote(&quote_id_str) {
+            Ok(Some((existing_payment_hash, _))) => {
+                match self.reconcile_lightning_send(&existing_payment_hash).await {
+                    Ok(Some(existing_send)) => {
+                        return self.lightning_send_response_with_lookup(
+                            &existing_send,
+                            false,
+                            payment_lookup_id.clone(),
+                        );
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        warn!(
+                            "Failed to reconcile existing lightning send for quote {}: {}",
+                            quote_id_str, e
+                        );
+                    }
+                }
+            }
+            Ok(None) => {}
+            Err(e) => {
+                warn!(
+                    "Failed to look up existing lightning send for quote {}: {}",
+                    quote_id_str, e
+                );
+            }
+        }
+        match self.reconcile_lightning_send(&payment_hash_hex).await {
+            Ok(Some(existing_send)) => {
                 return self.lightning_send_response_with_lookup(
                     &existing_send,
                     false,
                     payment_lookup_id.clone(),
                 );
             }
-        }
-        if let Some(existing_send) = self.reconcile_lightning_send(&payment_hash_hex).await? {
-            return self.lightning_send_response_with_lookup(
-                &existing_send,
-                false,
-                payment_lookup_id.clone(),
-            );
+            Ok(None) => {}
+            Err(e) => {
+                warn!(
+                    "Failed to reconcile lightning send {} before payment: {}",
+                    payment_hash_hex, e
+                );
+            }
         }
 
         // Try arkoor routing first — zero fee for Ark-native destinations
@@ -2028,8 +2438,8 @@ impl MintPayment for BarkBackend {
 
         // Create a stream that polls for incoming payments
         let stream = stream::unfold(
-            (backend, wallet, active, false),
-            |(backend, wallet, active, _)| async move {
+            (backend, wallet, active, 0usize),
+            |(backend, wallet, active, tick)| async move {
                 // Check if we should stop
                 if !active.load(Ordering::SeqCst) {
                     return None;
@@ -2038,115 +2448,36 @@ impl MintPayment for BarkBackend {
                 // Wait for the polling interval
                 tokio::time::sleep(Duration::from_secs(5)).await;
 
-                // Try to claim all lightning receives (non-blocking)
-                if let Err(e) = wallet.try_claim_all_lightning_receives(false).await {
-                    debug!("Failed to claim lightning receives: {}", e);
+                // Try to claim all lightning receives, waiting for an ongoing
+                // wallet-side claim to finish instead of dropping this tick.
+                if let Err(e) = wallet.try_claim_all_lightning_receives(true).await {
+                    warn!("Failed to claim lightning receives: {}", e);
                 }
 
-                // Get pending lightning receives
-                let pending = match wallet.pending_lightning_receives().await {
-                    Ok(pending) => pending,
-                    Err(e) => {
-                        debug!("Failed to get pending receives: {}", e);
-                        Vec::new()
-                    }
-                };
-
-                // Check for completed receives
-                for receive in pending {
-                    // If the receive has finished_at set, it's complete
-                    if receive.finished_at.is_some() {
-                        let payment_hash = receive.payment_hash;
-                        let payment_hash_bytes: [u8; 32] = payment_hash.into();
-                        let payment_hash_hex = hex::encode(payment_hash_bytes);
-                        let payment_identifier = match backend
-                            .state_store
-                            .lightning_receive_quote_for_hash(&payment_hash_hex)
-                        {
-                            Ok(Some(quote_id_str)) => match QuoteId::from_str(&quote_id_str) {
-                                Ok(quote_id) => PaymentIdentifier::QuoteId(quote_id),
-                                Err(e) => {
-                                    debug!(
-                                        "Invalid stored lightning receive quote id {}: {}",
-                                        quote_id_str, e
-                                    );
-                                    PaymentIdentifier::PaymentHash(payment_hash_bytes)
-                                }
-                            },
-                            Ok(None) => PaymentIdentifier::PaymentHash(payment_hash_bytes),
-                            Err(e) => {
-                                debug!("Failed to look up lightning receive quote id: {}", e);
-                                PaymentIdentifier::PaymentHash(payment_hash_bytes)
-                            }
-                        };
-                        let request_lookup_id = payment_identifier.to_string();
-                        match backend
-                            .state_store
-                            .is_lightning_receive_reported(&request_lookup_id)
-                        {
-                            Ok(true) => continue,
-                            Ok(false) => {}
-                            Err(e) => {
-                                debug!("Failed to check lightning receive report state: {}", e);
-                            }
+                // Rotate the starting event kind every tick so a busy kind
+                // cannot starve the others.
+                let mut event = None;
+                for kind in 0..4 {
+                    let result = match (tick + kind) % 4 {
+                        0 => backend.next_lightning_receive_event().await,
+                        1 => backend.next_onchain_receive_event().await,
+                        2 => backend.next_lightning_send_event().await,
+                        _ => backend.next_onchain_send_event().await,
+                    };
+                    match result {
+                        Ok(Some(found)) => {
+                            event = Some(found);
+                            break;
                         }
-                        let amount = receive
-                            .invoice
-                            .amount_milli_satoshis()
-                            .map(|msat| {
-                                Self::btc_amount_to_cdk_static(bitcoin::Amount::from_sat(
-                                    msat / 1000,
-                                ))
-                            })
-                            .unwrap_or(Self::cdk_amount_zero());
-
-                        if let Err(e) = backend
-                            .state_store
-                            .mark_lightning_receive_reported(&request_lookup_id)
-                        {
-                            debug!("Failed to mark lightning receive reported: {}", e);
+                        Ok(None) => {}
+                        Err(e) => {
+                            warn!("Failed to poll payment events: {}", e);
                         }
-                        let event = Event::PaymentReceived(WaitPaymentResponse {
-                            payment_identifier,
-                            payment_amount: amount,
-                            payment_id: payment_hash_hex,
-                        });
-
-                        return Some((Some(event), (backend, wallet, active, false)));
                     }
                 }
 
-                match backend.next_onchain_receive_event().await {
-                    Ok(Some(event)) => {
-                        return Some((Some(event), (backend, wallet, active, false)));
-                    }
-                    Ok(None) => {}
-                    Err(e) => {
-                        debug!("Failed to process onchain receives: {}", e);
-                    }
-                }
-
-                match backend.next_lightning_send_event().await {
-                    Ok(Some(event)) => {
-                        return Some((Some(event), (backend, wallet, active, false)));
-                    }
-                    Ok(None) => {}
-                    Err(e) => {
-                        debug!("Failed to process lightning sends: {}", e);
-                    }
-                }
-
-                match backend.next_onchain_send_event().await {
-                    Ok(Some(event)) => {
-                        return Some((Some(event), (backend, wallet, active, false)));
-                    }
-                    Ok(None) => {}
-                    Err(e) => {
-                        debug!("Failed to process onchain sends: {}", e);
-                    }
-                }
-
-                Some((None, (backend, wallet, active, false)))
+                let next_tick = tick.wrapping_add(1);
+                Some((event, (backend, wallet, active, next_tick)))
             },
         )
         .filter_map(|event| async move { event });
@@ -2203,14 +2534,30 @@ impl MintPayment for BarkBackend {
             }
 
             let quote_id_str = quote_id.to_string();
-            if let Some((payment_hash, _)) =
-                self.state_store.lightning_send_for_quote(&quote_id_str)?
-            {
-                if let Some(send) = self.reconcile_lightning_send(&payment_hash).await? {
-                    return self.lightning_send_response_with_lookup(
-                        &send,
-                        true,
-                        PaymentIdentifier::QuoteId(quote_id.clone()),
+            match self.state_store.lightning_send_for_quote(&quote_id_str) {
+                Ok(Some((payment_hash, _))) => {
+                    match self.reconcile_lightning_send(&payment_hash).await {
+                        Ok(Some(send)) => {
+                            return self.lightning_send_response_with_lookup(
+                                &send,
+                                true,
+                                PaymentIdentifier::QuoteId(quote_id.clone()),
+                            );
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            warn!(
+                                "Failed to reconcile lightning send for quote {}: {}",
+                                quote_id_str, e
+                            );
+                        }
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    warn!(
+                        "Failed to look up lightning send for quote {}: {}",
+                        quote_id_str, e
                     );
                 }
             }
@@ -2232,5 +2579,340 @@ impl MintPayment for BarkBackend {
 
     fn cancel_payment_event_stream(&self) {
         self.wait_invoice_active.store(false, Ordering::SeqCst);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    static NEXT_TEST_STORE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    fn test_store() -> BarkStateStore {
+        let unique = NEXT_TEST_STORE_ID.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "cdk-bark-state-{}-{unique}.redb",
+            std::process::id()
+        ));
+        BarkStateStore::open(path).expect("create state store")
+    }
+
+    fn finalized_receive(
+        quote_id: &str,
+        outpoint: &str,
+        amount_sat: u64,
+    ) -> OnchainReceiveIntentRecord {
+        OnchainReceiveIntentRecord {
+            quote_id: quote_id.to_string(),
+            deposit_outpoint: outpoint.to_string(),
+            gross_sat: amount_sat,
+            state: OnchainReceiveIntentState::Finalized {
+                board_txid: "txid".to_string(),
+                board_vtxo_ids: vec![],
+                fee_sat: 0,
+                amount_sat,
+                finalized_at: 0,
+            },
+        }
+    }
+
+    fn onchain_send(quote_id: &str) -> OnchainSendIntentRecord {
+        OnchainSendIntentRecord {
+            quote_id: quote_id.to_string(),
+            address: "bcrt1qexample".to_string(),
+            amount_sat: 1_000,
+            state: OnchainSendIntentState::NeedsReview {
+                reason: "test".to_string(),
+                fee_sat: None,
+                failed_at: 0,
+            },
+        }
+    }
+
+    fn lightning_send(payment_hash: &str, quote_id: &str) -> LightningSendIntentRecord {
+        LightningSendIntentRecord {
+            quote_id: quote_id.to_string(),
+            payment_hash: payment_hash.to_string(),
+            invoice: "invoice".to_string(),
+            amount_sat: 1_000,
+            estimated_fee_sat: 1,
+            state: LightningSendIntentState::NeedsReview {
+                reason: "test".to_string(),
+                failed_at: 0,
+            },
+        }
+    }
+
+    #[test]
+    fn reported_onchain_receive_is_not_reemitted_and_address_is_kept() {
+        let store = test_store();
+        let quote_id = QuoteId::new().to_string();
+        let outpoint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0";
+        let address = "bcrt1qexample";
+
+        store
+            .put_receive_address(&quote_id, address)
+            .expect("store receive address");
+        store
+            .put_receive_intent(&finalized_receive(&quote_id, outpoint, 1_000))
+            .expect("store receive intent");
+
+        // First delivery: the finalized receive is reported once.
+        let receive = store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .expect("unreported receive should be found");
+        assert_eq!(receive.deposit_outpoint, outpoint);
+
+        store
+            .mark_onchain_receive_reported(outpoint)
+            .expect("mark receive reported");
+
+        // The reported marker suppresses re-emission...
+        assert!(store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .is_none());
+        // ...while the finalized intent stays for status re-checks...
+        let finalized = store
+            .finalized_receives_for_quote(&quote_id)
+            .expect("finalized receives for quote");
+        assert_eq!(finalized.len(), 1);
+        // ...and the address mapping stays so later deposits are detected.
+        let addresses = store.receive_addresses().expect("receive addresses");
+        assert_eq!(addresses.get(&quote_id), Some(&address.to_string()));
+    }
+
+    #[test]
+    fn capped_receive_scan_rotates_and_finds_backlog_tail() {
+        let store = test_store();
+        // Fill the store with more reported receives than one scan window
+        // covers, then put an unreported receive behind them.
+        for i in 0..(2 * MAX_RECEIVE_INTENTS_SCANNED_PER_TICK) {
+            let outpoint = format!("{:064x}:0", i + 1);
+            store
+                .put_receive_intent(&finalized_receive(
+                    &QuoteId::new().to_string(),
+                    &outpoint,
+                    100,
+                ))
+                .expect("store receive intent");
+            store
+                .mark_onchain_receive_reported(&outpoint)
+                .expect("mark receive reported");
+        }
+        let tail_outpoint = format!("{:064x}:0", usize::MAX);
+        store
+            .put_receive_intent(&finalized_receive(
+                &QuoteId::new().to_string(),
+                &tail_outpoint,
+                100,
+            ))
+            .expect("store receive intent");
+
+        // First tick only sees a capped prefix of the reported backlog.
+        assert!(store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .is_none());
+        // Second tick resumes after the cursor and sees the next window.
+        assert!(store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .is_none());
+        // Third tick wraps around and reaches the unreported tail.
+        let receive = store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .expect("unreported receive should be found after rotation");
+        assert_eq!(receive.deposit_outpoint, tail_outpoint);
+
+        // Reporting the receive and advancing the cursor keeps it suppressed.
+        store
+            .mark_onchain_receive_reported(&receive.deposit_outpoint)
+            .expect("mark receive reported");
+        store
+            .advance_receive_scan_cursor(&receive.deposit_outpoint)
+            .expect("advance scan cursor");
+        assert!(store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .is_none());
+    }
+
+    #[test]
+    fn stale_scan_cursor_recovers_to_full_coverage() {
+        let store = test_store();
+        // Point the cursor at a key that no longer exists; the scan must
+        // recover and still find the unreported receive.
+        store
+            .put_scan_cursor(RECEIVE_SCAN_CURSOR_KEY, "ff:0")
+            .expect("seed stale cursor");
+        let outpoint = format!("{:064x}:0", 1);
+        store
+            .put_receive_intent(&finalized_receive(
+                &QuoteId::new().to_string(),
+                &outpoint,
+                100,
+            ))
+            .expect("store receive intent");
+        let receive = store
+            .next_unreported_finalized_receive(MAX_RECEIVE_INTENTS_SCANNED_PER_TICK)
+            .expect("scan receives")
+            .expect("unreported receive should be found with stale cursor");
+        assert_eq!(receive.deposit_outpoint, outpoint);
+    }
+
+    #[test]
+    fn filtered_scan_resumes_after_a_missing_cursor_key() {
+        let store = test_store();
+        store
+            .put_scan_cursor(ONCHAIN_SEND_RECONCILE_CURSOR_KEY, "quote-0001")
+            .expect("seed filtered cursor");
+
+        let records = vec![
+            ("quote-0000".to_string(), ()),
+            ("quote-0002".to_string(), ()),
+            ("quote-0003".to_string(), ()),
+        ];
+        let window = store
+            .rotated_records(ONCHAIN_SEND_RECONCILE_CURSOR_KEY, records, 1)
+            .expect("rotate filtered reconciliation window");
+
+        assert_eq!(window[0].0, "quote-0002");
+    }
+
+    #[test]
+    fn capped_reconciliation_windows_rotate_through_entire_backlog() {
+        let store = test_store();
+        let record_count = 2 * MAX_INTENTS_RECONCILED_PER_TICK + 1;
+
+        for index in 0..record_count {
+            let quote_id = format!("quote-{index:04}");
+            store
+                .put_send(&quote_id, &onchain_send(&quote_id))
+                .expect("store onchain send");
+
+            let payment_hash = format!("{index:064x}");
+            store
+                .put_lightning_send(&payment_hash, &lightning_send(&payment_hash, &quote_id))
+                .expect("store lightning send");
+        }
+
+        let mut onchain_seen = std::collections::HashSet::new();
+        for _ in 0..3 {
+            let sends = store.sends().expect("list onchain sends");
+            let window = store
+                .rotated_records(
+                    ONCHAIN_SEND_RECONCILE_CURSOR_KEY,
+                    sends,
+                    MAX_INTENTS_RECONCILED_PER_TICK,
+                )
+                .expect("rotate onchain reconciliation window");
+            if let Some((last, _)) = window.last() {
+                store
+                    .put_scan_cursor(ONCHAIN_SEND_RECONCILE_CURSOR_KEY, last)
+                    .expect("advance onchain reconciliation cursor");
+            }
+            onchain_seen.extend(window.into_iter().map(|(key, _)| key));
+        }
+        assert_eq!(onchain_seen.len(), record_count);
+
+        let mut lightning_seen = std::collections::HashSet::new();
+        for _ in 0..3 {
+            let sends = store.lightning_sends().expect("list lightning sends");
+            let window = store
+                .rotated_records(
+                    LIGHTNING_SEND_RECONCILE_CURSOR_KEY,
+                    sends,
+                    MAX_INTENTS_RECONCILED_PER_TICK,
+                )
+                .expect("rotate lightning reconciliation window");
+            if let Some((last, _)) = window.last() {
+                store
+                    .put_scan_cursor(LIGHTNING_SEND_RECONCILE_CURSOR_KEY, last)
+                    .expect("advance lightning reconciliation cursor");
+            }
+            lightning_seen.extend(window.into_iter().map(|(key, _)| key));
+        }
+        assert_eq!(lightning_seen.len(), record_count);
+    }
+
+    #[test]
+    fn onchain_reconciliation_only_selects_actionable_records() {
+        let now = 1_000;
+        let mut send = onchain_send("quote");
+        assert!(!BarkBackend::onchain_send_needs_reconciliation(&send, now));
+
+        send.state = OnchainSendIntentState::Attempting {
+            attempt: 1,
+            attempt_id: "attempt".to_string(),
+            fee_sat: 10,
+            started_at: now - SEND_ATTEMPT_REVIEW_SECS + 1,
+        };
+        assert!(!BarkBackend::onchain_send_needs_reconciliation(&send, now));
+
+        send.state = OnchainSendIntentState::Attempting {
+            attempt: 1,
+            attempt_id: "attempt".to_string(),
+            fee_sat: 10,
+            started_at: now - SEND_ATTEMPT_REVIEW_SECS,
+        };
+        assert!(BarkBackend::onchain_send_needs_reconciliation(&send, now));
+
+        send.state = OnchainSendIntentState::Broadcast {
+            txid: "txid".to_string(),
+            fee_sat: 10,
+            broadcast_at: now,
+        };
+        assert!(BarkBackend::onchain_send_needs_reconciliation(&send, now));
+
+        send.state = OnchainSendIntentState::Confirmed {
+            txid: "txid".to_string(),
+            fee_sat: 10,
+            confirmed_at: now,
+        };
+        assert!(!BarkBackend::onchain_send_needs_reconciliation(&send, now));
+    }
+
+    #[test]
+    fn reported_lightning_receive_keeps_quote_to_payment_hash_mapping() {
+        let store = test_store();
+        let quote_id = QuoteId::new().to_string();
+        let payment_hash = "ab".repeat(32);
+
+        store
+            .put_lightning_receive_quote(&quote_id, &payment_hash)
+            .expect("store receive quote");
+
+        // Status checks before payment find no settled receive.
+        assert!(store
+            .get_lightning_receive_hash(&quote_id)
+            .expect("get receive hash")
+            .is_some());
+
+        // Simulate the mint being notified via the event stream.
+        let request_lookup_id =
+            PaymentIdentifier::QuoteId(QuoteId::from_str(&quote_id).unwrap()).to_string();
+        store
+            .mark_lightning_receive_reported(&request_lookup_id)
+            .expect("mark receive reported");
+
+        assert!(store
+            .is_lightning_receive_reported(&request_lookup_id)
+            .expect("check reported"));
+        // The quote -> payment hash mapping must survive reporting so later
+        // status re-checks keep finding the paid invoice.
+        assert_eq!(
+            store
+                .get_lightning_receive_hash(&quote_id)
+                .expect("get receive hash"),
+            Some(payment_hash)
+        );
+        assert!(store
+            .lightning_receive_quotes()
+            .expect("receive quotes")
+            .iter()
+            .any(|(stored_quote, _)| stored_quote == &quote_id));
     }
 }

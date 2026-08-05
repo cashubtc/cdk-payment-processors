@@ -31,7 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated the CDK integration to `cdk-common` and `cdk-payment-processor`
   `0.17.3`.
-- Updated the Bark dependency stack to `0.3.0`.
+- Updated the Bark dependency stack from `0.3.0` to `0.5.0` and adapted the
+  backend to Bark's shared on-chain wallet and settled Lightning receive APIs.
+- On-chain receives now board only the detected deposit UTXO by building and
+  signing its funding transaction locally before passing it to
+  `Wallet::board_tx`.
+- Payment event polling now rotates across Lightning and on-chain receives and
+  sends, with bounded scans and persisted cursors for large state histories.
 - Renamed the backend and configuration from Ark to Bark and consolidated the
   implementation in `src/backend.rs`.
 - Changed the default network and public Bark/Esplora endpoints from signet to
@@ -54,6 +60,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   payments.
 - Completed incoming and outgoing payments are recorded so they are not
   emitted repeatedly after polling or restart.
+- Lightning receive events are now discovered from persisted quote mappings
+  and Bark's settled receive state instead of its pending-receive list, and
+  report the settled amount returned by Bark.
+- Persisted scan cursors prevent fixed-prefix starvation, including when the
+  cursor's previous record is no longer part of a filtered reconciliation set.
+- Outgoing-payment reconciliation excludes terminal records and on-chain
+  attempts that are not yet due for review from its per-tick budget, isolates
+  failures per record, and advances its cursor only after processing the
+  selected batch.
+- On-chain status checks reconcile only the requested send instead of
+  advancing the background reconciliation cursor on every poll.
+- Corrupt stored quote ids, outpoints, transaction ids, and payment hashes are
+  logged and skipped instead of aborting the whole event-polling pass.
+- Concurrent on-chain receive processing and background outgoing
+  reconciliation ticks are skipped instead of queued behind work already in
+  progress.
 
 ### Removed
 

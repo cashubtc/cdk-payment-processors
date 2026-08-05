@@ -146,9 +146,9 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "ark-lib"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "682b55f43c8cb9ec3dbe52f541926c38ef068c96b0706eeb2b5d6a06fc3bb619"
+checksum = "350858a563e6b7675e32eacd598122e6222226b1cbc4c5f1ce9210344a124880"
 dependencies = [
  "async-trait",
  "bark-bitcoin-ext",
@@ -344,15 +344,16 @@ dependencies = [
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5d010d799da6aa9f90a631c0a50caae950014959aa2ae661fdfabb1f629d529"
+checksum = "66b37e898a854bfab1f0cc74438c0209b11bea560ed8aa18f47e8b86582eb6d3"
 dependencies = [
  "bdk_bitcoind_rpc",
  "bdk_wallet",
  "bitcoin",
  "lazy_static",
  "log",
+ "rand_core 0.6.4",
  "serde",
  "serde_json",
  "thiserror 2.0.19",
@@ -360,9 +361,9 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2705c0e35667b28f60b68c422e4bfb0ccc39dbee20beb918803b66601f9a1e1"
+checksum = "4d9c3c12fa217f4df13974cd6c79af2c0d905c5bc3153475b45e251b2dddce82"
 dependencies = [
  "ark-lib",
  "bitcoin",
@@ -379,9 +380,9 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.3.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2885e70cdbe30450a82cc3860637165db6d60e2032036b5327b8096090de41b"
+checksum = "b585e60338b58e4260fc1ec4003d765d15b1fe3da62da8a87cf4f76cc2f33637"
 dependencies = [
  "anyhow",
  "ark-lib",
@@ -527,10 +528,11 @@ checksum = "32637268377fc7b10a8c6d51de3e7fba1ce5dd371a96e342b34e6078db558e7f"
 
 [[package]]
 name = "bip321"
-version = "0.1.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14538bd7af5559400f0c9402da86c29528510cbb6280189c9ab6c1c7d6a271c7"
+checksum = "7f271e8045de1a54f03466b260a59633b902f3f3dc98967c5eaca2dac40b79e5"
 dependencies = [
+ "bark-bitcoin-ext",
  "bitcoin",
  "lightning",
  "lightning-invoice 0.34.1",
@@ -642,9 +644,9 @@ dependencies = [
 
 [[package]]
 name = "bitcoind-async-client"
-version = "0.13.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043db5dcb3e7a9cdd72cbe28381d004e2dc5836eb8e36bf4972e600364450bf2"
+checksum = "42ed1d9a649ba17d17a5bba836ed68208667473ccec8478492cb83f3af28e9dc"
 dependencies = [
  "base64 0.22.1",
  "bitcoin",
