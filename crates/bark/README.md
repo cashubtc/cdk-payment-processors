@@ -5,7 +5,7 @@ Lightning and on-chain Bitcoin payments through Ark.
 
 The service implements CDK's `MintPayment` interface using `bark-wallet` and
 runs it with `cdk-payment-processor`. It is currently built against CDK
-`0.17.3` and Bark `0.5.0`.
+`0.17.3` and Bark `0.6.0`.
 
 ## Supported payments
 
@@ -21,6 +21,11 @@ runs it with `cdk-payment-processor`. It is currently built against CDK
 
 Only the `sat` unit is supported. BOLT11 MPP, amountless invoices, and BOLT12
 are not supported.
+
+Outgoing Lightning quotes use Bark's current Ark server fee schedule. Payment
+requests must include `max_fee_amount`; the processor refuses to start an
+uncapped payment or one whose current Bark fee exceeds that limit. Successful
+payments report Bark's recorded fee rather than the earlier quote estimate.
 
 ## Requirements
 

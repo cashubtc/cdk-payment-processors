@@ -168,7 +168,12 @@ struct LightningSendIntentRecord {
     payment_hash: String,
     invoice: String,
     amount_sat: u64,
-    estimated_fee_sat: u64,
+    #[serde(alias = "estimated_fee_sat")]
+    preflight_fee_sat: u64,
+    #[serde(default)]
+    max_fee_sat: Option<u64>,
+    #[serde(default)]
+    fee_reconciled: bool,
     state: LightningSendIntentState,
 }
 
@@ -1557,10 +1562,9 @@ impl BarkBackend {
     }
 
     fn lightning_send_needs_reconciliation(send: &LightningSendIntentRecord) -> bool {
-        !matches!(
-            &send.state,
-            LightningSendIntentState::Paid { .. } | LightningSendIntentState::Failed { .. }
-        )
+        !matches!(&send.state, LightningSendIntentState::Failed { .. })
+            && (!matches!(&send.state, LightningSendIntentState::Paid { .. })
+                || !send.fee_reconciled)
     }
 
     async fn reconcile_lightning_sends(&self) -> Result<(), cdk_common::payment::Error> {
@@ -1611,7 +1615,7 @@ impl BarkBackend {
             .await
         {
             Ok(state) => {
-                let updated = Self::lightning_intent_from_bark_send(intent, &state);
+                let updated = self.lightning_intent_from_bark_send(intent, &state).await?;
                 self.state_store
                     .put_lightning_send(payment_hash_hex, &updated)?;
                 Ok(Some(updated))
@@ -1721,25 +1725,11 @@ impl BarkBackend {
         mark_completed: bool,
         payment_lookup_id: PaymentIdentifier,
     ) -> Result<MakePaymentResponse, cdk_common::payment::Error> {
-        let (status, payment_proof, total_spent) = match &send.state {
-            LightningSendIntentState::Paid {
-                fee_sat, preimage, ..
-            } => {
-                if mark_completed {
-                    self.state_store
-                        .mark_lightning_send_completed(&send.payment_hash)?;
-                }
-                (
-                    MeltQuoteState::Paid,
-                    Some(preimage.clone()),
-                    send.amount_sat.saturating_add(*fee_sat),
-                )
-            }
-            LightningSendIntentState::Failed { .. } => (MeltQuoteState::Unpaid, None, 0),
-            LightningSendIntentState::Attempting { .. }
-            | LightningSendIntentState::Pending { .. }
-            | LightningSendIntentState::NeedsReview { .. } => (MeltQuoteState::Pending, None, 0),
-        };
+        if mark_completed && matches!(send.state, LightningSendIntentState::Paid { .. }) {
+            self.state_store
+                .mark_lightning_send_completed(&send.payment_hash)?;
+        }
+        let (status, payment_proof, total_spent) = Self::lightning_send_response_details(send)?;
 
         Ok(MakePaymentResponse {
             payment_lookup_id,
@@ -1749,20 +1739,79 @@ impl BarkBackend {
         })
     }
 
-    fn lightning_intent_from_bark_send(
+    fn lightning_send_response_details(
+        send: &LightningSendIntentRecord,
+    ) -> Result<(MeltQuoteState, Option<String>, u64), cdk_common::payment::Error> {
+        if matches!(&send.state, LightningSendIntentState::Paid { .. }) && !send.fee_reconciled {
+            return Err(cdk_common::payment::Error::Custom(format!(
+                "Actual Bark fee for paid lightning payment {} has not been reconciled",
+                send.payment_hash
+            )));
+        }
+
+        Ok(match &send.state {
+            LightningSendIntentState::Paid {
+                fee_sat, preimage, ..
+            } => (
+                MeltQuoteState::Paid,
+                Some(preimage.clone()),
+                send.amount_sat.saturating_add(*fee_sat),
+            ),
+            LightningSendIntentState::Failed { .. } => (MeltQuoteState::Unpaid, None, 0),
+            LightningSendIntentState::Attempting { .. }
+            | LightningSendIntentState::Pending { .. }
+            | LightningSendIntentState::NeedsReview { .. } => (MeltQuoteState::Pending, None, 0),
+        })
+    }
+
+    async fn lightning_intent_from_bark_send(
+        &self,
         mut intent: LightningSendIntentRecord,
         state: &bark::actions::lightning::pay::LightningSendState,
-    ) -> LightningSendIntentRecord {
+    ) -> Result<LightningSendIntentRecord, cdk_common::payment::Error> {
         use bark::actions::lightning::pay::LightningSendState;
         match state {
             LightningSendState::Paid(paid) => {
+                let payment_hash = Self::parse_payment_hash_hex(&intent.payment_hash)?;
+                let fee_sat = self
+                    .wallet
+                    .history()
+                    .await
+                    .map_err(|e| {
+                        cdk_common::payment::Error::Custom(format!(
+                            "Failed to read Bark payment history for {}: {}",
+                            intent.payment_hash, e
+                        ))
+                    })?
+                    .into_iter()
+                    .find(|movement| {
+                        movement.lightning_payment_hash() == Some(PaymentHash::from(payment_hash))
+                    })
+                    .map(|movement| movement.offchain_fee.to_sat())
+                    .ok_or_else(|| {
+                        cdk_common::payment::Error::Custom(format!(
+                            "Bark reports lightning payment {} as paid but its actual fee is missing from payment history",
+                            intent.payment_hash
+                        ))
+                    })?;
+
+                // Records created before fee caps were persisted have no cap
+                // to validate retroactively. The payment has already settled,
+                // so report its real fee rather than leaving it unreconcilable.
+                if intent.max_fee_sat.is_some() {
+                    Self::enforce_lightning_fee_cap(fee_sat, intent.max_fee_sat)?;
+                }
                 intent.state = LightningSendIntentState::Paid {
-                    fee_sat: intent.estimated_fee_sat,
+                    fee_sat,
                     preimage: hex::encode(paid.preimage.as_ref()),
                     paid_at: Self::unix_now(),
                 };
+                intent.fee_reconciled = true;
             }
             LightningSendState::InProgress(send) => {
+                if intent.max_fee_sat.is_some() {
+                    Self::enforce_lightning_fee_cap(send.fee.to_sat(), intent.max_fee_sat)?;
+                }
                 intent.amount_sat = send.payment_amount.to_sat();
                 intent.state = LightningSendIntentState::Pending {
                     fee_sat: send.fee.to_sat(),
@@ -1771,7 +1820,7 @@ impl BarkBackend {
             }
             LightningSendState::Unknown => {}
         }
-        intent
+        Ok(intent)
     }
 
     fn parse_payment_hash_hex(payment_hash: &str) -> Result<[u8; 32], cdk_common::payment::Error> {
@@ -1789,8 +1838,23 @@ impl BarkBackend {
         })
     }
 
-    fn estimated_lightning_fee_sat(amount_sat: u64) -> u64 {
-        std::cmp::max(1, amount_sat / 1000)
+    fn enforce_lightning_fee_cap(
+        fee_sat: u64,
+        max_fee_sat: Option<u64>,
+    ) -> Result<(), cdk_common::payment::Error> {
+        let max_fee_sat = max_fee_sat.ok_or_else(|| {
+            cdk_common::payment::Error::Custom(
+                "Lightning payments require max_fee_amount; refusing an uncapped payment"
+                    .to_string(),
+            )
+        })?;
+        if fee_sat > max_fee_sat {
+            return Err(cdk_common::payment::Error::Custom(format!(
+                "Bark lightning fee {} sat exceeds max fee {} sat",
+                fee_sat, max_fee_sat
+            )));
+        }
+        Ok(())
     }
 
     /// Convert bitcoin::Amount to CDK Amount (instance method)
@@ -2074,7 +2138,18 @@ impl MintPayment for BarkBackend {
                     }
                 }
 
-                let fee_sats = Self::estimated_lightning_fee_sat(amount_sat);
+                let fee_sats = self
+                    .wallet
+                    .estimate_lightning_send_fee(bitcoin::Amount::from_sat(amount_sat))
+                    .await
+                    .map_err(|e| {
+                        cdk_common::payment::Error::Custom(format!(
+                            "Failed to estimate Bark lightning fee: {}",
+                            e
+                        ))
+                    })?
+                    .fee
+                    .to_sat();
                 debug!("Payment quote: {} sat + {} sat fee", amount_sat, fee_sats);
 
                 Ok(PaymentQuoteResponse {
@@ -2273,18 +2348,6 @@ impl MintPayment for BarkBackend {
             cdk_common::payment::Error::Custom("Invoice has no amount".to_string())
         })?;
         let amount_sat = amount_msat / 1000;
-        let estimated_fee_sat = std::cmp::max(1, amount_sat / 1000);
-
-        if let Some(max_fee) = bolt11_options.max_fee_amount.as_ref() {
-            let max_fee_sat = max_fee.clone().to_u64();
-            if estimated_fee_sat > max_fee_sat {
-                return Err(cdk_common::payment::Error::Custom(format!(
-                    "Estimated lightning fee {} sat exceeds max fee {} sat",
-                    estimated_fee_sat, max_fee_sat
-                )));
-            }
-        }
-
         let _lightning_send_guard = self.lightning_send_lock.lock().await;
         match self.state_store.lightning_send_for_quote(&quote_id_str) {
             Ok(Some((existing_payment_hash, _))) => {
@@ -2355,12 +2418,36 @@ impl MintPayment for BarkBackend {
             }
         }
 
+        // Bark snapshots the Ark server's fee schedule when it connects. Its
+        // estimator and payment builder therefore calculate from the same
+        // schedule; holding the send lock also keeps the selected wallet inputs
+        // stable between this check and starting the payment.
+        let max_fee_sat = bolt11_options
+            .max_fee_amount
+            .as_ref()
+            .map(|max_fee| max_fee.clone().to_u64());
+        let preflight_fee_sat = self
+            .wallet
+            .estimate_lightning_send_fee(bitcoin::Amount::from_sat(amount_sat))
+            .await
+            .map_err(|e| {
+                cdk_common::payment::Error::Custom(format!(
+                    "Failed to estimate Bark lightning fee before payment: {}",
+                    e
+                ))
+            })?
+            .fee
+            .to_sat();
+        Self::enforce_lightning_fee_cap(preflight_fee_sat, max_fee_sat)?;
+
         let mut send_intent = LightningSendIntentRecord {
             quote_id: bolt11_options.quote_id.to_string(),
             payment_hash: payment_hash_hex.clone(),
             invoice: invoice_str.clone(),
             amount_sat,
-            estimated_fee_sat,
+            preflight_fee_sat,
+            max_fee_sat,
+            fee_reconciled: false,
             state: LightningSendIntentState::Attempting {
                 attempt: 1,
                 attempt_id: uuid::Uuid::new_v4().to_string(),
@@ -2387,7 +2474,9 @@ impl MintPayment for BarkBackend {
                         bark::actions::lightning::pay::LightningSendState::Unknown
                     ) =>
                 {
-                    let recovered = Self::lightning_intent_from_bark_send(send_intent, &state);
+                    let recovered = self
+                        .lightning_intent_from_bark_send(send_intent, &state)
+                        .await?;
                     self.state_store
                         .put_lightning_send(&payment_hash_hex, &recovered)?;
                 }
@@ -2414,7 +2503,9 @@ impl MintPayment for BarkBackend {
             .check_lightning_payment(PaymentHash::from(payment_hash), false)
             .await
             .unwrap_or(bark::actions::lightning::pay::LightningSendState::Unknown);
-        let updated_send = Self::lightning_intent_from_bark_send(send_intent, &state);
+        let updated_send = self
+            .lightning_intent_from_bark_send(send_intent, &state)
+            .await?;
         self.state_store
             .put_lightning_send(&payment_hash_hex, &updated_send)?;
 
@@ -2635,12 +2726,79 @@ mod tests {
             payment_hash: payment_hash.to_string(),
             invoice: "invoice".to_string(),
             amount_sat: 1_000,
-            estimated_fee_sat: 1,
+            preflight_fee_sat: 1,
+            max_fee_sat: Some(1),
+            fee_reconciled: false,
             state: LightningSendIntentState::NeedsReview {
                 reason: "test".to_string(),
                 failed_at: 0,
             },
         }
+    }
+
+    #[test]
+    fn lightning_fee_cap_rejects_uncapped_and_excessive_fees() {
+        assert!(BarkBackend::enforce_lightning_fee_cap(1, None).is_err());
+        assert!(BarkBackend::enforce_lightning_fee_cap(11, Some(10)).is_err());
+        assert!(BarkBackend::enforce_lightning_fee_cap(10, Some(10)).is_ok());
+    }
+
+    #[test]
+    fn lightning_total_spent_uses_recorded_fee_not_preflight_fee() {
+        let mut send = lightning_send(&"ab".repeat(32), &QuoteId::new().to_string());
+        send.amount_sat = 1_000;
+        send.preflight_fee_sat = 1;
+        send.max_fee_sat = Some(50);
+        send.fee_reconciled = true;
+        send.state = LightningSendIntentState::Paid {
+            fee_sat: 37,
+            preimage: "preimage".to_string(),
+            paid_at: 0,
+        };
+
+        let (status, payment_proof, total_spent) =
+            BarkBackend::lightning_send_response_details(&send).expect("reconciled response");
+        assert_eq!(status, MeltQuoteState::Paid);
+        assert_eq!(payment_proof.as_deref(), Some("preimage"));
+        assert_eq!(total_spent, 1_037);
+    }
+
+    #[test]
+    fn legacy_lightning_send_fee_field_remains_readable() {
+        let record: LightningSendIntentRecord = serde_json::from_value(serde_json::json!({
+            "quote_id": QuoteId::new().to_string(),
+            "payment_hash": "ab".repeat(32),
+            "invoice": "invoice",
+            "amount_sat": 1_000,
+            "estimated_fee_sat": 1,
+            "state": {
+                "state": "needs_review",
+                "reason": "test",
+                "failed_at": 0
+            }
+        }))
+        .expect("deserialize legacy lightning send");
+
+        assert_eq!(record.preflight_fee_sat, 1);
+        assert_eq!(record.max_fee_sat, None);
+        assert!(!record.fee_reconciled);
+    }
+
+    #[test]
+    fn legacy_paid_lightning_send_requires_fee_reconciliation() {
+        let mut send = lightning_send(&"ab".repeat(32), &QuoteId::new().to_string());
+        send.state = LightningSendIntentState::Paid {
+            fee_sat: 1,
+            preimage: "preimage".to_string(),
+            paid_at: 0,
+        };
+
+        assert!(BarkBackend::lightning_send_needs_reconciliation(&send));
+        assert!(BarkBackend::lightning_send_response_details(&send).is_err());
+
+        send.fee_reconciled = true;
+        assert!(!BarkBackend::lightning_send_needs_reconciliation(&send));
+        assert!(BarkBackend::lightning_send_response_details(&send).is_ok());
     }
 
     #[test]

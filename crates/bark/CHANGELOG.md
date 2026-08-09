@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Lightning melt quotes now use Bark's current Ark fee estimate, payment
+  execution fails closed when no fee cap is supplied or the current fee exceeds
+  it, and settled `total_spent` uses Bark's actual recorded fee.
 - The gRPC server now honors the configured bind address and port.
 - The gRPC server now honors `tls_enable`, `tls_cert_path`, and
   `tls_key_path`.
