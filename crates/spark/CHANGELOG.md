@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated project structure documentation to reflect actual files
 
 ### Fixed
+- Payment requests now reject non-satoshi units instead of accepting unsupported denominations or labeling satoshi amounts and fees with the caller's unit
 - The gRPC server now honors `tls_enable`, `tls_cert_path`, and `tls_key_path`
 - Removed the Breez API-key requirement
 - Incoming payment events require a valid Lightning payment hash instead of constructing a fallback hash

@@ -101,10 +101,11 @@ RUST_LOG=cdk_payment_processor_spark=debug,spark_wallet=info,spark=info cargo ru
 ## Payment behavior
 
 The backend advertises amount-bound BOLT11 support with multi-part payments
-(MPP) disabled. Incoming invoices do not embed a Spark address, and outgoing
-BOLT11 payments do not take the direct Spark-address shortcut. This ensures
-that the BOLT11 payment hash—the lookup identifier required by CDK—is actually
-settled.
+(MPP) disabled. It supports satoshi-denominated requests only and rejects
+other currency units. Incoming invoices do not embed a Spark address, and
+outgoing BOLT11 payments do not take the direct Spark-address shortcut. This
+ensures that the BOLT11 payment hash—the lookup identifier required by CDK—is
+actually settled.
 
 Incoming payment notifications and status checks report the received amount
 without adding fees.

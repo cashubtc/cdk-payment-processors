@@ -97,6 +97,14 @@ pub struct SparkBackend {
 }
 
 impl SparkBackend {
+    fn ensure_supported_unit(unit: &CurrencyUnit) -> Result<(), Error> {
+        if matches!(unit, CurrencyUnit::Sat) {
+            Ok(())
+        } else {
+            Err(Error::UnsupportedUnit)
+        }
+    }
+
     /// Connect a wallet directly to the Spark operators and SSP.
     pub async fn new(config: BackendConfig) -> anyhow::Result<Self> {
         if config.mnemonic.is_empty() {
@@ -359,6 +367,7 @@ impl MintPayment for SparkBackend {
             return Err(Error::UnsupportedPaymentOption);
         };
 
+        Self::ensure_supported_unit(opts.amount.unit())?;
         let amount_sats = opts.amount.to_sat()?;
         if amount_sats == 0 {
             return Err(Error::AmountMismatch);
@@ -408,6 +417,8 @@ impl MintPayment for SparkBackend {
         unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<PaymentQuoteResponse, Self::Err> {
+        Self::ensure_supported_unit(unit)?;
+
         let OutgoingPaymentOptions::Bolt11(opts) = options else {
             return Err(Error::UnsupportedPaymentOption);
         };
@@ -424,8 +435,8 @@ impl MintPayment for SparkBackend {
 
         Ok(PaymentQuoteResponse {
             request_lookup_id: Some(PaymentIdentifier::PaymentHash(payment_hash)),
-            amount: Amount::from(amount_sats).with_unit(unit.clone()),
-            fee: Amount::from(fee_sats).with_unit(unit.clone()),
+            amount: Amount::new(amount_sats, CurrencyUnit::Sat),
+            fee: Amount::new(fee_sats, CurrencyUnit::Sat),
             state: MeltQuoteState::Unpaid,
             extra_json: None,
             estimated_blocks: None,
@@ -438,6 +449,8 @@ impl MintPayment for SparkBackend {
         unit: &CurrencyUnit,
         options: OutgoingPaymentOptions,
     ) -> Result<MakePaymentResponse, Self::Err> {
+        Self::ensure_supported_unit(unit)?;
+
         let OutgoingPaymentOptions::Bolt11(opts) = options else {
             return Err(Error::UnsupportedPaymentOption);
         };
@@ -489,7 +502,7 @@ impl MintPayment for SparkBackend {
                 payment_lookup_id: payment_identifier,
                 payment_proof: None,
                 status: MeltQuoteState::Pending,
-                total_spent: Amount::new(amount_sats, unit.clone()),
+                total_spent: Amount::new(amount_sats, CurrencyUnit::Sat),
             });
         };
 
@@ -700,8 +713,22 @@ mod tests {
     use std::sync::Arc;
 
     use super::{PaymentEventStream, SparkBackend};
-    use cdk_common::nuts::MeltQuoteState;
+    use cdk_common::nuts::{CurrencyUnit, MeltQuoteState};
+    use cdk_common::payment::Error;
     use spark_wallet::LightningSendStatus;
+
+    #[test]
+    fn accepts_only_the_advertised_sat_unit() {
+        assert!(SparkBackend::ensure_supported_unit(&CurrencyUnit::Sat).is_ok());
+        assert!(matches!(
+            SparkBackend::ensure_supported_unit(&CurrencyUnit::Msat),
+            Err(Error::UnsupportedUnit)
+        ));
+        assert!(matches!(
+            SparkBackend::ensure_supported_unit(&CurrencyUnit::Usd),
+            Err(Error::UnsupportedUnit)
+        ));
+    }
 
     #[test]
     fn tracks_each_payment_event_stream_until_completion_or_drop() {
