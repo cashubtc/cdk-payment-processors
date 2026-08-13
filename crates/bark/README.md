@@ -64,7 +64,8 @@ cp config.toml.example config.toml
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
 
 Supported network values are `mainnet`, `testnet`, `signet`, and `regtest`.
-The Bark server, Esplora endpoint, and network must refer to the same network.
+Any other value causes the processor to fail during startup. The Bark server,
+Esplora endpoint, and network must refer to the same network.
 
 The mnemonic controls the processor's funds. Never use the mnemonic from
 `config.toml.example`, commit a real mnemonic, or expose it in logs.

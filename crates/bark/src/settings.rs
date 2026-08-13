@@ -19,7 +19,7 @@ pub struct BackendConfig {
     #[serde(default = "default_esplora_address")]
     pub esplora_address: String,
 
-    /// Bitcoin network (signet, testnet, mainnet)
+    /// Bitcoin network (mainnet, testnet, signet, regtest)
     #[serde(default = "default_network")]
     pub network: String,
 

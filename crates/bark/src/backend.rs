@@ -724,6 +724,18 @@ fn build_board_funding_psbt(
 }
 
 impl BarkBackend {
+    fn parse_network(network: &str) -> anyhow::Result<bitcoin::Network> {
+        match network.to_ascii_lowercase().as_str() {
+            "mainnet" => Ok(bitcoin::Network::Bitcoin),
+            "testnet" => Ok(bitcoin::Network::Testnet),
+            "signet" => Ok(bitcoin::Network::Signet),
+            "regtest" => Ok(bitcoin::Network::Regtest),
+            _ => anyhow::bail!(
+                "Unsupported Bark network `{network}`; expected one of: mainnet, testnet, signet, regtest"
+            ),
+        }
+    }
+
     /// Create a new Bark backend with initialized wallet
     pub async fn new(config: &BackendConfig) -> anyhow::Result<Self> {
         info!("Initializing Bark backend");
@@ -734,17 +746,7 @@ impl BarkBackend {
             .parse::<bip39::Mnemonic>()
             .map_err(|e| anyhow::anyhow!("Invalid mnemonic: {}", e))?;
 
-        // Parse the network
-        let network = match config.network.to_lowercase().as_str() {
-            "mainnet" => bitcoin::Network::Bitcoin,
-            "testnet" => bitcoin::Network::Testnet,
-            "signet" => bitcoin::Network::Signet,
-            "regtest" => bitcoin::Network::Regtest,
-            _ => {
-                warn!("Unknown network '{}', defaulting to Signet", config.network);
-                bitcoin::Network::Signet
-            }
-        };
+        let network = Self::parse_network(&config.network)?;
 
         // Build bark config
         let bark_config = bark::Config {

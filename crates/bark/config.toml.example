@@ -21,7 +21,7 @@ server_address = "https://ark.second.tech"
 # Esplora API address for on-chain data
 esplora_address = "https://mempool.second.tech/api"
 
-# Bitcoin network: signet, testnet, mainnet
+# Bitcoin network: mainnet, testnet, signet, regtest
 network = "mainnet"
 
 # Data directory for SQLite database
