@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Updated `cdk-common` and `cdk-payment-processor` from 0.16.0-rc.1 to 0.17.3
+- Updated `redb` from 3.1.0 to 4.1.0
+- Made incoming quote persistence and outgoing transfer ID selection atomic
 - Raised the minimum supported Rust version to 1.88
 - BOLT11 settings now report multi-part payments as unsupported
 - Renamed `server_addr` and `server_port` to `address` and `port`, and `SERVER_ADDR` to `SERVER_ADDRESS`

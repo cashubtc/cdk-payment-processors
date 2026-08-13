@@ -180,8 +180,7 @@ impl SparkBackend {
         payment_id: &str,
     ) -> Result<(), Error> {
         self.db
-            .insert_mint_quote(payment_hash, payment_request)
-            .and_then(|_| self.db.insert_mint_payment_id(payment_hash, payment_id))
+            .insert_mint_quote_and_payment_id(payment_hash, payment_request, payment_id)
             .map_err(|e| Error::Custom(e.to_string()))
     }
 
@@ -196,20 +195,13 @@ impl SparkBackend {
     }
 
     fn get_or_create_melt_transfer_id(&self, payment_hash: &[u8; 32]) -> Result<TransferId, Error> {
-        if let Some(id) = self
+        let candidate = TransferId::generate().to_string();
+        let transfer_id = self
             .db
-            .get_melt_transfer_id(payment_hash)
-            .map_err(|e| Error::Custom(e.to_string()))?
-        {
-            return TransferId::from_str(&id)
-                .map_err(|e| Error::Custom(format!("Invalid stored Spark transfer ID: {e}")));
-        }
-
-        let transfer_id = TransferId::generate();
-        self.db
-            .insert_melt_transfer_id(payment_hash, &transfer_id.to_string())
+            .get_or_insert_melt_transfer_id(payment_hash, &candidate)
             .map_err(|e| Error::Custom(e.to_string()))?;
-        Ok(transfer_id)
+        TransferId::from_str(&transfer_id)
+            .map_err(|e| Error::Custom(format!("Invalid stored Spark transfer ID: {e}")))
     }
 
     fn get_mint_quote(&self, payment_hash: &[u8; 32]) -> Result<Option<String>, Error> {
