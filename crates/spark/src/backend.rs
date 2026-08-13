@@ -331,6 +331,25 @@ impl SparkBackend {
 
         Ok(None)
     }
+
+    async fn find_outgoing_transfer_by_id(
+        &self,
+        transfer_id: TransferId,
+    ) -> Result<Option<WalletTransfer>, Error> {
+        let result = self
+            .wallet
+            .list_transfers(ListTransfersRequest {
+                paging: None,
+                transfer_ids: vec![transfer_id],
+            })
+            .await
+            .map_err(|e| Error::Lightning(Box::new(e)))?;
+
+        Ok(result
+            .items
+            .into_iter()
+            .find(|transfer| transfer.direction == TransferDirection::Outgoing))
+    }
 }
 
 #[async_trait]
@@ -638,16 +657,27 @@ impl MintPayment for SparkBackend {
             .map_err(|e| Error::Custom(e.to_string()))?;
 
         let Some(payment_id) = payment_id else {
-            let started = self
+            let transfer_id = self
                 .db
                 .get_melt_transfer_id(payment_hash)
-                .map_err(|e| Error::Custom(e.to_string()))?
-                .is_some();
+                .map_err(|e| Error::Custom(e.to_string()))?;
 
-            if let Some(transfer) = self
-                .find_transfer_for_invoice(&invoice, TransferDirection::Outgoing)
-                .await?
-            {
+            let transfer = match transfer_id.as_deref() {
+                Some(transfer_id) => {
+                    let transfer_id = TransferId::from_str(transfer_id).map_err(|e| {
+                        Error::Custom(format!("Invalid stored Spark transfer ID: {e}"))
+                    })?;
+                    self.find_outgoing_transfer_by_id(transfer_id).await?
+                }
+                None => {
+                    // Records created before transfer IDs were persisted can only
+                    // be recovered by scanning transfer history for the invoice.
+                    self.find_transfer_for_invoice(&invoice, TransferDirection::Outgoing)
+                        .await?
+                }
+            };
+
+            if let Some(transfer) = transfer {
                 let payment_proof = transfer
                     .user_request
                     .as_ref()
@@ -668,7 +698,7 @@ impl MintPayment for SparkBackend {
             return Ok(MakePaymentResponse {
                 payment_lookup_id: payment_identifier.clone(),
                 payment_proof: None,
-                status: if started {
+                status: if transfer_id.is_some() {
                     MeltQuoteState::Pending
                 } else {
                     MeltQuoteState::Unpaid

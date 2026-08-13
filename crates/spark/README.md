@@ -14,7 +14,7 @@ No Breez API key is required.
 - Use stable Spark transfer IDs for retry-safe outgoing payments
 - Shut down Spark background processing cleanly
 
-The project uses `spark-wallet` from the Breez Spark SDK `0.19.0` source tag.
+The project uses `spark-wallet` from the Breez Spark SDK `0.22.0` source tag.
 It does not depend on the high-level `breez-sdk-spark` crate or Breez auxiliary
 services.
 
