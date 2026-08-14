@@ -2,7 +2,7 @@
   description = "CDK Flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
@@ -56,7 +56,17 @@
 
         # Toolchains
         # latest stable
-        stable_toolchain = pkgs.rust-bin.stable."1.91.1".default.override {
+        stable_toolchain = pkgs.rust-bin.stable."1.95.0".default.override {
+          targets = [ "wasm32-unknown-unknown" ]; # wasm
+          extensions = [
+            "rustfmt"
+            "clippy"
+            "rust-analyzer"
+          ];
+        };
+
+        # MSRV stable
+        msrv_toolchain = pkgs.rust-bin.stable."1.85.0".default.override {
           targets = [ "wasm32-unknown-unknown" ]; # wasm
           extensions = [
             "rustfmt"
@@ -158,6 +168,18 @@
             # pre-commit-checks
             _shellHook = (self.checks.${system}.pre-commit-check.shellHook or "");
 
+            # devShells
+            msrv = pkgs.mkShell (
+              {
+                shellHook = "
+              ${_shellHook}
+              ";
+                buildInputs = buildInputs ++ [ msrv_toolchain ];
+                inherit nativeBuildInputs;
+              }
+              // envVars
+            );
+
             stable = pkgs.mkShell (
               {
                 shellHook = ''${_shellHook}'';
@@ -211,6 +233,7 @@
           in
           {
             inherit
+              msrv
               stable
               nightly
               integration
