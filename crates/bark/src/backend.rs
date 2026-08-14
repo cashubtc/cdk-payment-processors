@@ -42,8 +42,10 @@ pub struct BarkBackend {
     onchain_receive_lock: Arc<tokio::sync::Mutex<()>>,
     onchain_send_lock: Arc<tokio::sync::Mutex<()>>,
     lightning_send_lock: Arc<tokio::sync::Mutex<()>>,
+    arkoor_send_lock: Arc<tokio::sync::Mutex<()>>,
     state_store: Arc<BarkStateStore>,
     network: bitcoin::Network,
+    event_poll_interval: Duration,
     wait_invoice_active: Arc<AtomicBool>,
 }
 
@@ -62,6 +64,10 @@ const LIGHTNING_SEND_INTENTS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("lightning_send_intents");
 const COMPLETED_LIGHTNING_SENDS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("completed_lightning_sends");
+const ARKOOR_SEND_INTENTS_TABLE: TableDefinition<&str, &str> =
+    TableDefinition::new("arkoor_send_intents");
+const COMPLETED_ARKOOR_SENDS_TABLE: TableDefinition<&str, &str> =
+    TableDefinition::new("completed_arkoor_sends");
 // Per-scan rotation cursors so capped scans resume where the last scan
 // stopped instead of restarting at the first key every tick.
 const SCAN_CURSOR_TABLE: TableDefinition<&str, &str> = TableDefinition::new("scan_cursors");
@@ -71,6 +77,7 @@ const ONCHAIN_SEND_SCAN_CURSOR_KEY: &str = "onchain_send_scan";
 const LIGHTNING_SEND_SCAN_CURSOR_KEY: &str = "lightning_send_scan";
 const ONCHAIN_SEND_RECONCILE_CURSOR_KEY: &str = "onchain_send_reconcile";
 const LIGHTNING_SEND_RECONCILE_CURSOR_KEY: &str = "lightning_send_reconcile";
+const ARKOOR_SEND_SCAN_CURSOR_KEY: &str = "arkoor_send_scan";
 
 const RETRY_BACKOFF_SECS: u64 = 30;
 const SEND_ATTEMPT_REVIEW_SECS: u64 = 60;
@@ -82,6 +89,7 @@ const MAX_INTENTS_RECONCILED_PER_TICK: usize = 32;
 const MAX_RECEIVE_INTENTS_SCANNED_PER_TICK: usize = 64;
 const MAX_SEND_INTENTS_SCANNED_PER_TICK: usize = 64;
 const MAX_RECEIVE_QUOTES_SCANNED_PER_TICK: usize = 64;
+const ARKOOR_PAYMENT_METHOD: &str = "arkoor";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OnchainReceiveIntentRecord {
@@ -205,6 +213,23 @@ enum LightningSendIntentState {
     },
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ArkoorSendIntentRecord {
+    quote_id: String,
+    address: String,
+    amount_sat: u64,
+    successful_payments_before: usize,
+    state: ArkoorSendIntentState,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+enum ArkoorSendIntentState {
+    Attempting { attempt_id: String, started_at: u64 },
+    Paid { payment_proof: String, paid_at: u64 },
+    NeedsReview { reason: String, failed_at: u64 },
+}
+
 struct BarkStateStore {
     db: Database,
 }
@@ -229,6 +254,8 @@ impl BarkStateStore {
             tx.open_table(COMPLETED_SENDS_TABLE)?;
             tx.open_table(LIGHTNING_SEND_INTENTS_TABLE)?;
             tx.open_table(COMPLETED_LIGHTNING_SENDS_TABLE)?;
+            tx.open_table(ARKOOR_SEND_INTENTS_TABLE)?;
+            tx.open_table(COMPLETED_ARKOOR_SENDS_TABLE)?;
             tx.open_table(SCAN_CURSOR_TABLE)?;
         }
         tx.commit()?;
@@ -236,7 +263,7 @@ impl BarkStateStore {
     }
 
     fn store_error(e: impl std::fmt::Display) -> cdk_common::payment::Error {
-        cdk_common::payment::Error::Custom(format!("Onchain state store error: {}", e))
+        cdk_common::payment::Error::Custom(format!("Bark state store error: {}", e))
     }
 
     fn get_scan_cursor(&self, scan: &str) -> Result<Option<String>, cdk_common::payment::Error> {
@@ -703,6 +730,76 @@ impl BarkStateStore {
             .map_err(Self::store_error)?
             .is_some())
     }
+
+    fn put_arkoor_send(
+        &self,
+        quote_id: &str,
+        send: &ArkoorSendIntentRecord,
+    ) -> Result<(), cdk_common::payment::Error> {
+        let tx = self.db.begin_write().map_err(Self::store_error)?;
+        {
+            let mut table = tx
+                .open_table(ARKOOR_SEND_INTENTS_TABLE)
+                .map_err(Self::store_error)?;
+            let value = serde_json::to_string(send).map_err(Self::store_error)?;
+            table
+                .insert(quote_id, value.as_str())
+                .map_err(Self::store_error)?;
+        }
+        tx.commit().map_err(Self::store_error)
+    }
+
+    fn get_arkoor_send(
+        &self,
+        quote_id: &str,
+    ) -> Result<Option<ArkoorSendIntentRecord>, cdk_common::payment::Error> {
+        let tx = self.db.begin_read().map_err(Self::store_error)?;
+        let table = tx
+            .open_table(ARKOOR_SEND_INTENTS_TABLE)
+            .map_err(Self::store_error)?;
+        table
+            .get(quote_id)
+            .map_err(Self::store_error)?
+            .map(|value| serde_json::from_str(value.value()).map_err(Self::store_error))
+            .transpose()
+    }
+
+    fn arkoor_sends(
+        &self,
+    ) -> Result<Vec<(String, ArkoorSendIntentRecord)>, cdk_common::payment::Error> {
+        let tx = self.db.begin_read().map_err(Self::store_error)?;
+        let table = tx
+            .open_table(ARKOOR_SEND_INTENTS_TABLE)
+            .map_err(Self::store_error)?;
+        let mut sends = Vec::new();
+        for entry in table.iter().map_err(Self::store_error)? {
+            let (key, value) = entry.map_err(Self::store_error)?;
+            sends.push((
+                key.value().to_string(),
+                serde_json::from_str(value.value()).map_err(Self::store_error)?,
+            ));
+        }
+        Ok(sends)
+    }
+
+    fn mark_arkoor_send_completed(&self, quote_id: &str) -> Result<(), cdk_common::payment::Error> {
+        let tx = self.db.begin_write().map_err(Self::store_error)?;
+        {
+            let mut table = tx
+                .open_table(COMPLETED_ARKOOR_SENDS_TABLE)
+                .map_err(Self::store_error)?;
+            table.insert(quote_id, "1").map_err(Self::store_error)?;
+        }
+        tx.commit().map_err(Self::store_error)
+    }
+
+    fn is_arkoor_send_completed(&self, quote_id: &str) -> Result<bool, cdk_common::payment::Error> {
+        let tx = self.db.begin_read().map_err(Self::store_error)?;
+        let table = tx
+            .open_table(COMPLETED_ARKOOR_SENDS_TABLE)
+            .map_err(Self::store_error)?;
+        Ok(table.get(quote_id).map_err(Self::store_error)?.is_some())
+    }
 }
 
 // Build an unsigned board funding PSBT restricted to the given deposit UTXO.
@@ -739,6 +836,10 @@ impl BarkBackend {
     /// Create a new Bark backend with initialized wallet
     pub async fn new(config: &BackendConfig) -> anyhow::Result<Self> {
         info!("Initializing Bark backend");
+
+        if config.event_poll_interval_ms == 0 {
+            anyhow::bail!("BARK_EVENT_POLL_INTERVAL_MS must be greater than zero");
+        }
 
         // Parse the mnemonic
         let mnemonic = config
@@ -814,10 +915,52 @@ impl BarkBackend {
             onchain_receive_lock: Arc::new(tokio::sync::Mutex::new(())),
             onchain_send_lock: Arc::new(tokio::sync::Mutex::new(())),
             lightning_send_lock: Arc::new(tokio::sync::Mutex::new(())),
+            arkoor_send_lock: Arc::new(tokio::sync::Mutex::new(())),
             state_store,
             network,
+            event_poll_interval: Duration::from_millis(config.event_poll_interval_ms),
             wait_invoice_active: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    /// Return the spendable Bark balance for the opt-in regtest harness.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_spendable_balance_sat(&self) -> anyhow::Result<u64> {
+        Ok(self.wallet.balance().await?.spendable.to_sat())
+    }
+
+    /// Derive and persist the next Ark address for lifecycle tests.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_new_ark_address(&self) -> anyhow::Result<String> {
+        Ok(self.wallet.new_address().await?.to_string())
+    }
+
+    /// Return a previously derived Ark address for lifecycle tests.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_peek_ark_address(&self, index: u32) -> anyhow::Result<String> {
+        Ok(self.wallet.peek_address(index).await?.to_string())
+    }
+
+    /// Count Bark movements for one Lightning payment hash. This lets the
+    /// opt-in topology test verify that concurrent retries create one external
+    /// payment, independently of the processor's cached response.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_lightning_movement_count(
+        &self,
+        payment_hash: [u8; 32],
+    ) -> anyhow::Result<usize> {
+        let payment_hash = PaymentHash::from(payment_hash);
+        Ok(self
+            .wallet
+            .history()
+            .await?
+            .into_iter()
+            .filter(|movement| movement.lightning_payment_hash() == Some(payment_hash))
+            .count())
     }
 
     fn parse_bitcoin_address(
@@ -1820,7 +1963,42 @@ impl BarkBackend {
                     started_at: Self::unix_now(),
                 };
             }
-            LightningSendState::Unknown => {}
+            LightningSendState::Unknown => {
+                // Bark removes a completed failed send from its payment
+                // checkpoint store, so `check_lightning_payment` reports it
+                // as unknown. The movement remains the authoritative durable
+                // record of that terminal outcome.
+                let payment_hash = Self::parse_payment_hash_hex(&intent.payment_hash)?;
+                if let Some(movement) = self
+                    .wallet
+                    .history()
+                    .await
+                    .map_err(|e| {
+                        cdk_common::payment::Error::Custom(format!(
+                            "Failed to read Bark payment history for {}: {}",
+                            intent.payment_hash, e
+                        ))
+                    })?
+                    .into_iter()
+                    .find(|movement| {
+                        movement.lightning_payment_hash() == Some(PaymentHash::from(payment_hash))
+                            && matches!(
+                                movement.status,
+                                bark::movement::MovementStatus::Failed
+                                    | bark::movement::MovementStatus::Canceled
+                            )
+                    })
+                {
+                    intent.state = LightningSendIntentState::Failed {
+                        reason: format!(
+                            "Bark lightning payment movement finished as {}",
+                            movement.status.as_str()
+                        ),
+                        fee_sat: Some(movement.offchain_fee.to_sat()),
+                        failed_at: Self::unix_now(),
+                    };
+                }
+            }
         }
         Ok(intent)
     }
@@ -1857,6 +2035,183 @@ impl BarkBackend {
             )));
         }
         Ok(())
+    }
+
+    fn parse_arkoor_request(
+        method: &str,
+        request: &str,
+        extra_json: Option<&str>,
+    ) -> Result<(ark::Address, u64), cdk_common::payment::Error> {
+        // cdk-payment-processor 0.17.3 does not carry the custom method name
+        // over gRPC. Bark exposes only one custom method, so an empty method
+        // is unambiguous and remains compatible with that protocol version.
+        if !method.is_empty() && method != ARKOOR_PAYMENT_METHOD {
+            return Err(cdk_common::payment::Error::UnsupportedPaymentOption);
+        }
+
+        let address = ark::Address::from_str(request)
+            .map_err(|e| cdk_common::payment::Error::Custom(format!("Invalid Ark address: {e}")))?;
+        let extra_json = extra_json.ok_or_else(|| {
+            cdk_common::payment::Error::Custom(
+                "Arkoor payments require extra_json.amount_sat".to_string(),
+            )
+        })?;
+        let extra: serde_json::Value = serde_json::from_str(extra_json).map_err(|e| {
+            cdk_common::payment::Error::Custom(format!("Invalid arkoor extra_json: {e}"))
+        })?;
+        let amount_sat = extra
+            .get("amount_sat")
+            .and_then(serde_json::Value::as_u64)
+            .filter(|amount| *amount > 0)
+            .ok_or_else(|| {
+                cdk_common::payment::Error::Custom(
+                    "Arkoor extra_json.amount_sat must be a positive integer".to_string(),
+                )
+            })?;
+
+        Ok((address, amount_sat))
+    }
+
+    async fn validate_arkoor_request(
+        &self,
+        method: &str,
+        request: &str,
+        extra_json: Option<&str>,
+    ) -> Result<(ark::Address, u64), cdk_common::payment::Error> {
+        let (address, amount_sat) = Self::parse_arkoor_request(method, request, extra_json)?;
+        self.wallet
+            .validate_arkoor_address(&address)
+            .await
+            .map_err(|e| {
+                cdk_common::payment::Error::Custom(format!("Invalid arkoor destination: {e}"))
+            })?;
+        Ok((address, amount_sat))
+    }
+
+    async fn successful_arkoor_payments(
+        &self,
+        address: &str,
+        amount_sat: u64,
+    ) -> Result<Vec<bark::movement::Movement>, cdk_common::payment::Error> {
+        let mut movements = self.wallet.history().await.map_err(|e| {
+            cdk_common::payment::Error::Custom(format!(
+                "Failed to read Bark history while reconciling arkoor payment: {e}"
+            ))
+        })?;
+        movements.retain(|movement| {
+            movement.status == bark::movement::MovementStatus::Successful
+                && movement.sent_to.iter().any(|destination| {
+                    destination.amount.to_sat() == amount_sat
+                        && destination.destination.value_string() == address
+                })
+        });
+        movements.sort_by_key(|movement| movement.id);
+        Ok(movements)
+    }
+
+    async fn reconcile_arkoor_send(
+        &self,
+        quote_id: &str,
+    ) -> Result<Option<ArkoorSendIntentRecord>, cdk_common::payment::Error> {
+        let Some(mut send) = self.state_store.get_arkoor_send(quote_id)? else {
+            return Ok(None);
+        };
+        if !matches!(send.state, ArkoorSendIntentState::Attempting { .. }) {
+            return Ok(Some(send));
+        }
+
+        if let Err(e) = self.wallet.sync_pending_arkoor_sends().await {
+            debug!("Failed to drive pending arkoor sends during reconciliation: {e}");
+        }
+        let successful = self
+            .successful_arkoor_payments(&send.address, send.amount_sat)
+            .await?;
+        if successful.len() > send.successful_payments_before {
+            let movement = successful
+                .last()
+                .expect("successful arkoor payment count increased");
+            send.state = ArkoorSendIntentState::Paid {
+                payment_proof: format!("arkoor-movement-{}", movement.id),
+                paid_at: Self::unix_now(),
+            };
+            self.state_store.put_arkoor_send(quote_id, &send)?;
+        }
+
+        Ok(Some(send))
+    }
+
+    fn arkoor_send_response(
+        &self,
+        send: &ArkoorSendIntentRecord,
+        mark_completed: bool,
+    ) -> Result<MakePaymentResponse, cdk_common::payment::Error> {
+        let quote_id = QuoteId::from_str(&send.quote_id).map_err(|e| {
+            cdk_common::payment::Error::Custom(format!(
+                "Invalid stored arkoor quote id {}: {e}",
+                send.quote_id
+            ))
+        })?;
+        let (status, payment_proof, total_spent) = match &send.state {
+            ArkoorSendIntentState::Paid { payment_proof, .. } => {
+                if mark_completed {
+                    self.state_store
+                        .mark_arkoor_send_completed(&send.quote_id)?;
+                }
+                (
+                    MeltQuoteState::Paid,
+                    Some(payment_proof.clone()),
+                    send.amount_sat,
+                )
+            }
+            ArkoorSendIntentState::Attempting { .. }
+            | ArkoorSendIntentState::NeedsReview { .. } => (MeltQuoteState::Pending, None, 0),
+        };
+        Ok(MakePaymentResponse {
+            payment_lookup_id: PaymentIdentifier::QuoteId(quote_id),
+            payment_proof,
+            status,
+            total_spent: Amount::new(total_spent, CurrencyUnit::Sat),
+        })
+    }
+
+    async fn next_arkoor_send_event(&self) -> Result<Option<Event>, cdk_common::payment::Error> {
+        let Ok(_send_guard) = self.arkoor_send_lock.try_lock() else {
+            return Ok(None);
+        };
+        let sends = self.state_store.arkoor_sends()?;
+        let window = self.state_store.rotated_records(
+            ARKOOR_SEND_SCAN_CURSOR_KEY,
+            sends,
+            MAX_SEND_INTENTS_SCANNED_PER_TICK,
+        )?;
+        let mut last_scanned = None;
+        for (quote_id, _) in window {
+            last_scanned = Some(quote_id.clone());
+            if self.state_store.is_arkoor_send_completed(&quote_id)? {
+                continue;
+            }
+            let Some(send) = self.reconcile_arkoor_send(&quote_id).await? else {
+                continue;
+            };
+            if matches!(send.state, ArkoorSendIntentState::Paid { .. }) {
+                let quote_id = QuoteId::from_str(&quote_id).map_err(|e| {
+                    cdk_common::payment::Error::Custom(format!(
+                        "Invalid stored arkoor quote id: {e}"
+                    ))
+                })?;
+                let details = self.arkoor_send_response(&send, false)?;
+                self.state_store
+                    .mark_arkoor_send_completed(&send.quote_id)?;
+                self.state_store
+                    .put_scan_cursor(ARKOOR_SEND_SCAN_CURSOR_KEY, &send.quote_id)?;
+                return Ok(Some(Event::PaymentSuccessful { quote_id, details }));
+            }
+        }
+        if let Some(last) = last_scanned {
+            self.state_store
+                .put_scan_cursor(ARKOOR_SEND_SCAN_CURSOR_KEY, &last)?;
+        }
+        Ok(None)
     }
 
     /// Convert bitcoin::Amount to CDK Amount (instance method)
@@ -1987,6 +2342,15 @@ impl MintPayment for BarkBackend {
 
     async fn get_settings(&self) -> Result<SettingsResponse, Self::Err> {
         debug!("Getting Bark wallet settings");
+        let custom = HashMap::from([(
+            ARKOOR_PAYMENT_METHOD.to_string(),
+            serde_json::json!({
+                "request": "ark_address",
+                "extra": {"amount_sat": "positive_integer"},
+                "fee": "zero"
+            })
+            .to_string(),
+        )]);
         Ok(SettingsResponse {
             unit: "sat".to_string(),
             bolt11: Some(Bolt11Settings {
@@ -2000,7 +2364,7 @@ impl MintPayment for BarkBackend {
                 min_receive_amount_sat: 1,
                 min_send_amount_sat: 1,
             }),
-            custom: Default::default(),
+            custom,
         })
     }
 
@@ -2079,8 +2443,9 @@ impl MintPayment for BarkBackend {
         self.state_store
             .put_lightning_receive_quote(&quote_id.to_string(), &payment_hash_hex)?;
 
-        // Get expiry - convert Duration to seconds
-        let expiry = Some(invoice.expiry_time().as_secs());
+        // CDK expects an absolute Unix expiry, while BOLT11 stores a creation
+        // timestamp plus a relative expiry duration.
+        let expiry = invoice.expires_at().map(|duration| duration.as_secs());
 
         // Convert invoice to string
         let invoice_str = invoice.to_string();
@@ -2116,29 +2481,16 @@ impl MintPayment for BarkBackend {
             OutgoingPaymentOptions::Bolt11(opts) => {
                 let invoice = &opts.bolt11;
 
+                if invoice.is_expired() {
+                    return Err(cdk_common::payment::Error::Custom(
+                        "Invoice is expired".to_string(),
+                    ));
+                }
+
                 let amount_msat = invoice.amount_milli_satoshis().ok_or_else(|| {
                     cdk_common::payment::Error::Custom("Invoice has no amount".to_string())
                 })?;
                 let amount_sat = amount_msat / 1000;
-
-                // Try arkoor routing — quote 0 fee if destination is an Ark address
-                let invoice_str = invoice.to_string();
-                if let Ok(ark_addr) = ark::Address::from_str(&invoice_str) {
-                    if self.wallet.validate_arkoor_address(&ark_addr).await.is_ok() {
-                        debug!("Arkoor quote: {} sat, 0 fee", amount_sat);
-                        return Ok(PaymentQuoteResponse {
-                            request_lookup_id: Some(PaymentIdentifier::QuoteId(
-                                opts.quote_id.clone(),
-                            )),
-                            amount: Amount::new(amount_sat, CurrencyUnit::Sat),
-                            fee: Amount::new(0, CurrencyUnit::Sat),
-                            state: MeltQuoteState::Unpaid,
-                            extra_json: Some(serde_json::json!({"routing": "arkoor"})),
-                            estimated_blocks: None,
-                            fee_options: None,
-                        });
-                    }
-                }
 
                 let fee_sats = self
                     .wallet
@@ -2195,6 +2547,24 @@ impl MintPayment for BarkBackend {
                     fee_options: Some(fee_options),
                 });
             }
+            OutgoingPaymentOptions::Custom(opts) => {
+                let (_, amount_sat) = self
+                    .validate_arkoor_request(
+                        &opts.method,
+                        &opts.request,
+                        opts.extra_json.as_deref(),
+                    )
+                    .await?;
+                Ok(PaymentQuoteResponse {
+                    request_lookup_id: Some(PaymentIdentifier::QuoteId(opts.quote_id.clone())),
+                    amount: Amount::new(amount_sat, CurrencyUnit::Sat),
+                    fee: Amount::new(0, CurrencyUnit::Sat),
+                    state: MeltQuoteState::Unpaid,
+                    extra_json: Some(serde_json::json!({"routing": ARKOOR_PAYMENT_METHOD})),
+                    estimated_blocks: None,
+                    fee_options: None,
+                })
+            }
             _ => Err(cdk_common::payment::Error::UnsupportedPaymentOption),
         }
     }
@@ -2213,6 +2583,77 @@ impl MintPayment for BarkBackend {
 
         let bolt11_options = match options {
             OutgoingPaymentOptions::Bolt11(opts) => opts,
+            OutgoingPaymentOptions::Custom(opts) => {
+                let _send_guard = self.arkoor_send_lock.lock().await;
+                let quote_id = opts.quote_id.to_string();
+                if let Some(existing) = self.reconcile_arkoor_send(&quote_id).await? {
+                    return self.arkoor_send_response(&existing, false);
+                }
+
+                let (address, amount_sat) = self
+                    .validate_arkoor_request(
+                        &opts.method,
+                        &opts.request,
+                        opts.extra_json.as_deref(),
+                    )
+                    .await?;
+                let successful_payments_before = self
+                    .successful_arkoor_payments(&opts.request, amount_sat)
+                    .await?
+                    .len();
+                let mut send = ArkoorSendIntentRecord {
+                    quote_id: quote_id.clone(),
+                    address: opts.request.clone(),
+                    amount_sat,
+                    successful_payments_before,
+                    state: ArkoorSendIntentState::Attempting {
+                        attempt_id: uuid::Uuid::new_v4().to_string(),
+                        started_at: Self::unix_now(),
+                    },
+                };
+                self.state_store.put_arkoor_send(&quote_id, &send)?;
+
+                match self
+                    .wallet
+                    .send_arkoor_payment(&address, bitcoin::Amount::from_sat(amount_sat))
+                    .await
+                {
+                    Ok(()) => {
+                        let successful = self
+                            .successful_arkoor_payments(&opts.request, amount_sat)
+                            .await?;
+                        let payment_proof = successful
+                            .last()
+                            .map(|movement| format!("arkoor-movement-{}", movement.id))
+                            .unwrap_or_else(|| format!("arkoor-quote-{quote_id}"));
+                        send.state = ArkoorSendIntentState::Paid {
+                            payment_proof,
+                            paid_at: Self::unix_now(),
+                        };
+                        self.state_store.put_arkoor_send(&quote_id, &send)?;
+                        return self.arkoor_send_response(&send, false);
+                    }
+                    Err(e) => {
+                        let reason = e.to_string();
+                        if let Some(reconciled) = self.reconcile_arkoor_send(&quote_id).await? {
+                            if matches!(reconciled.state, ArkoorSendIntentState::Paid { .. }) {
+                                return self.arkoor_send_response(&reconciled, false);
+                            }
+                            send = reconciled;
+                        }
+                        send.state = ArkoorSendIntentState::NeedsReview {
+                            reason: format!(
+                                "Bark arkoor send returned an error after the attempt started: {reason}"
+                            ),
+                            failed_at: Self::unix_now(),
+                        };
+                        self.state_store.put_arkoor_send(&quote_id, &send)?;
+                        return Err(cdk_common::payment::Error::Custom(format!(
+                            "Failed to send arkoor payment: {reason}"
+                        )));
+                    }
+                }
+            }
             OutgoingPaymentOptions::Onchain(opts) => {
                 if !matches!(opts.fee_index, None | Some(ONCHAIN_FEE_INDEX)) {
                     return Err(cdk_common::payment::Error::Custom(format!(
@@ -2339,6 +2780,12 @@ impl MintPayment for BarkBackend {
         // bolt11_options.bolt11 is already a parsed invoice
         let invoice = &bolt11_options.bolt11;
 
+        if invoice.is_expired() {
+            return Err(cdk_common::payment::Error::Custom(
+                "Invoice is expired".to_string(),
+            ));
+        }
+
         // Extract payment hash
         let payment_hash: [u8; 32] = *invoice.payment_hash().as_ref();
         let payment_hash_hex = hex::encode(payment_hash);
@@ -2395,31 +2842,7 @@ impl MintPayment for BarkBackend {
             }
         }
 
-        // Try arkoor routing first — zero fee for Ark-native destinations
         let invoice_str = invoice.to_string();
-        if let Ok(ark_addr) = ark::Address::from_str(&invoice_str) {
-            if self.wallet.validate_arkoor_address(&ark_addr).await.is_ok() {
-                let amount = bitcoin::Amount::from_sat(amount_sat);
-                match self.wallet.send_arkoor_payment(&ark_addr, amount).await {
-                    Ok(_vtxos) => {
-                        info!(
-                            "Sent arkoor payment {} sat to {} for quote {}",
-                            amount_sat, ark_addr, bolt11_options.quote_id
-                        );
-                        return Ok(MakePaymentResponse {
-                            payment_lookup_id: PaymentIdentifier::QuoteId(bolt11_options.quote_id),
-                            payment_proof: None,
-                            status: MeltQuoteState::Paid,
-                            total_spent: Amount::new(amount_sat, CurrencyUnit::Sat),
-                        });
-                    }
-                    Err(e) => {
-                        warn!("Arkoor send failed, falling back to Lightning: {}", e);
-                    }
-                }
-            }
-        }
-
         // Bark snapshots the Ark server's fee schedule when it connects. Its
         // estimator and payment builder therefore calculate from the same
         // schedule; holding the send lock also keeps the selected wallet inputs
@@ -2528,18 +2951,19 @@ impl MintPayment for BarkBackend {
         let backend = self.clone();
         let wallet = self.wallet.clone();
         let active = self.wait_invoice_active.clone();
+        let poll_interval = self.event_poll_interval;
 
         // Create a stream that polls for incoming payments
         let stream = stream::unfold(
-            (backend, wallet, active, 0usize),
-            |(backend, wallet, active, tick)| async move {
+            (backend, wallet, active, poll_interval, 0usize),
+            |(backend, wallet, active, poll_interval, tick)| async move {
                 // Check if we should stop
                 if !active.load(Ordering::SeqCst) {
                     return None;
                 }
 
                 // Wait for the polling interval
-                tokio::time::sleep(Duration::from_secs(5)).await;
+                tokio::time::sleep(poll_interval).await;
 
                 // Try to claim all lightning receives, waiting for an ongoing
                 // wallet-side claim to finish instead of dropping this tick.
@@ -2550,12 +2974,13 @@ impl MintPayment for BarkBackend {
                 // Rotate the starting event kind every tick so a busy kind
                 // cannot starve the others.
                 let mut event = None;
-                for kind in 0..4 {
-                    let result = match (tick + kind) % 4 {
+                for kind in 0..5 {
+                    let result = match (tick + kind) % 5 {
                         0 => backend.next_lightning_receive_event().await,
                         1 => backend.next_onchain_receive_event().await,
                         2 => backend.next_lightning_send_event().await,
-                        _ => backend.next_onchain_send_event().await,
+                        3 => backend.next_onchain_send_event().await,
+                        _ => backend.next_arkoor_send_event().await,
                     };
                     match result {
                         Ok(Some(found)) => {
@@ -2570,7 +2995,7 @@ impl MintPayment for BarkBackend {
                 }
 
                 let next_tick = tick.wrapping_add(1);
-                Some((event, (backend, wallet, active, next_tick)))
+                Some((event, (backend, wallet, active, poll_interval, next_tick)))
             },
         )
         .filter_map(|event| async move { event });
@@ -2627,6 +3052,13 @@ impl MintPayment for BarkBackend {
             }
 
             let quote_id_str = quote_id.to_string();
+            if self.state_store.get_arkoor_send(&quote_id_str)?.is_some() {
+                let _send_guard = self.arkoor_send_lock.lock().await;
+                if let Some(send) = self.reconcile_arkoor_send(&quote_id_str).await? {
+                    return self.arkoor_send_response(&send, true);
+                }
+            }
+
             match self.state_store.lightning_send_for_quote(&quote_id_str) {
                 Ok(Some((payment_hash, _))) => {
                     match self.reconcile_lightning_send(&payment_hash).await {
@@ -2681,13 +3113,16 @@ mod tests {
 
     static NEXT_TEST_STORE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-    fn test_store() -> BarkStateStore {
+    fn test_store_path() -> PathBuf {
         let unique = NEXT_TEST_STORE_ID.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
+        std::env::temp_dir().join(format!(
             "cdk-bark-state-{}-{unique}.redb",
             std::process::id()
-        ));
-        BarkStateStore::open(path).expect("create state store")
+        ))
+    }
+
+    fn test_store() -> BarkStateStore {
+        BarkStateStore::open(test_store_path()).expect("create state store")
     }
 
     fn finalized_receive(
@@ -2738,6 +3173,156 @@ mod tests {
         }
     }
 
+    fn arkoor_send(quote_id: &str) -> ArkoorSendIntentRecord {
+        ArkoorSendIntentRecord {
+            quote_id: quote_id.to_string(),
+            address: "tark1ptest".to_string(),
+            amount_sat: 1_000,
+            successful_payments_before: 0,
+            state: ArkoorSendIntentState::Paid {
+                payment_proof: "arkoor-movement-1".to_string(),
+                paid_at: 1,
+            },
+        }
+    }
+
+    #[test]
+    fn supported_networks_are_explicit_and_unknown_values_fail() {
+        assert_eq!(
+            BarkBackend::parse_network("mainnet").unwrap(),
+            bitcoin::Network::Bitcoin
+        );
+        assert_eq!(
+            BarkBackend::parse_network("TESTNET").unwrap(),
+            bitcoin::Network::Testnet
+        );
+        assert_eq!(
+            BarkBackend::parse_network("signet").unwrap(),
+            bitcoin::Network::Signet
+        );
+        assert_eq!(
+            BarkBackend::parse_network("Regtest").unwrap(),
+            bitcoin::Network::Regtest
+        );
+        let error = BarkBackend::parse_network("typo-net").unwrap_err();
+        assert!(error.to_string().contains("Unsupported Bark network"));
+    }
+
+    #[test]
+    fn arkoor_custom_request_contract_is_strict() {
+        let address = "ark1pndckx4ezqqp4cn00sj5cswh7vrhh9vm647qr3ht5a57s4vdp7vrpptxv66x3ehfzqyp4cn00sj5cswh7vrhh9vm647qr3ht5a57s4vdp7vrpptxv66x3ehgjdr0q7";
+        let (_, amount_sat) = BarkBackend::parse_arkoor_request(
+            ARKOOR_PAYMENT_METHOD,
+            address,
+            Some(r#"{"amount_sat":1234}"#),
+        )
+        .expect("valid arkoor request");
+        assert_eq!(amount_sat, 1_234);
+
+        // cdk-payment-processor 0.17.3 drops the custom method name on the
+        // wire, so Bark intentionally accepts the unambiguous empty method.
+        assert!(
+            BarkBackend::parse_arkoor_request("", address, Some(r#"{"amount_sat":1}"#)).is_ok()
+        );
+        assert!(
+            BarkBackend::parse_arkoor_request("unknown", address, Some(r#"{"amount_sat":1}"#))
+                .is_err()
+        );
+
+        for extra in [
+            None,
+            Some("not-json"),
+            Some(r#"{"amount_sat":0}"#),
+            Some(r#"{"amount_sat":-1}"#),
+            Some(r#"{"amount_sat":"1"}"#),
+            Some(r#"{}"#),
+        ] {
+            assert!(
+                BarkBackend::parse_arkoor_request(ARKOOR_PAYMENT_METHOD, address, extra).is_err()
+            );
+        }
+        assert!(BarkBackend::parse_arkoor_request(
+            ARKOOR_PAYMENT_METHOD,
+            "not-an-ark-address",
+            Some(r#"{"amount_sat":1}"#)
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn all_payment_state_survives_store_reopen() {
+        let path = test_store_path();
+        let receive_quote = QuoteId::new().to_string();
+        let send_quote = QuoteId::new().to_string();
+        let lightning_quote = QuoteId::new().to_string();
+        let arkoor_quote = QuoteId::new().to_string();
+        let outpoint = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0";
+        let payment_hash = "ab".repeat(32);
+
+        {
+            let store = BarkStateStore::open(path.clone()).expect("create state store");
+            store
+                .put_receive_address(&receive_quote, "bcrt1qexample")
+                .unwrap();
+            store
+                .put_receive_intent(&finalized_receive(&receive_quote, outpoint, 1_000))
+                .unwrap();
+            store.mark_onchain_receive_reported(outpoint).unwrap();
+            store
+                .put_lightning_receive_quote(&receive_quote, &payment_hash)
+                .unwrap();
+            store
+                .mark_lightning_receive_reported(&receive_quote)
+                .unwrap();
+            store
+                .put_send(&send_quote, &onchain_send(&send_quote))
+                .unwrap();
+            store.mark_send_completed(&send_quote).unwrap();
+            store
+                .put_lightning_send(
+                    &payment_hash,
+                    &lightning_send(&payment_hash, &lightning_quote),
+                )
+                .unwrap();
+            store.mark_lightning_send_completed(&payment_hash).unwrap();
+            store
+                .put_arkoor_send(&arkoor_quote, &arkoor_send(&arkoor_quote))
+                .unwrap();
+            store.mark_arkoor_send_completed(&arkoor_quote).unwrap();
+            store.put_scan_cursor("test-scan", "last-key").unwrap();
+        }
+
+        let reopened = BarkStateStore::open(path.clone()).expect("reopen state store");
+        assert_eq!(
+            reopened.receive_addresses().unwrap().get(&receive_quote),
+            Some(&"bcrt1qexample".to_string())
+        );
+        assert!(reopened.get_receive_intent(outpoint).unwrap().is_some());
+        assert!(reopened.is_receive_reported(outpoint).unwrap());
+        assert_eq!(
+            reopened.get_lightning_receive_hash(&receive_quote).unwrap(),
+            Some(payment_hash.clone())
+        );
+        assert!(reopened
+            .is_lightning_receive_reported(&receive_quote)
+            .unwrap());
+        assert!(reopened.get_send(&send_quote).unwrap().is_some());
+        assert!(reopened.is_send_completed(&send_quote).unwrap());
+        assert!(reopened
+            .get_lightning_send(&payment_hash)
+            .unwrap()
+            .is_some());
+        assert!(reopened.is_lightning_send_completed(&payment_hash).unwrap());
+        assert!(reopened.get_arkoor_send(&arkoor_quote).unwrap().is_some());
+        assert!(reopened.is_arkoor_send_completed(&arkoor_quote).unwrap());
+        assert_eq!(
+            reopened.get_scan_cursor("test-scan").unwrap().as_deref(),
+            Some("last-key")
+        );
+        drop(reopened);
+        std::fs::remove_file(path).expect("remove test state store");
+    }
+
     #[test]
     fn lightning_fee_cap_rejects_uncapped_and_excessive_fees() {
         assert!(BarkBackend::enforce_lightning_fee_cap(1, None).is_err());
@@ -2763,6 +3348,38 @@ mod tests {
         assert_eq!(status, MeltQuoteState::Paid);
         assert_eq!(payment_proof.as_deref(), Some("preimage"));
         assert_eq!(total_spent, 1_037);
+    }
+
+    #[test]
+    fn lightning_status_mapping_is_conservative() {
+        let mut send = lightning_send(&"ab".repeat(32), &QuoteId::new().to_string());
+        send.state = LightningSendIntentState::Pending {
+            fee_sat: 10,
+            started_at: 0,
+        };
+        assert_eq!(
+            BarkBackend::lightning_send_response_details(&send).unwrap(),
+            (MeltQuoteState::Pending, None, 0)
+        );
+
+        send.state = LightningSendIntentState::Failed {
+            reason: "no route".to_string(),
+            fee_sat: Some(10),
+            failed_at: 0,
+        };
+        assert_eq!(
+            BarkBackend::lightning_send_response_details(&send).unwrap(),
+            (MeltQuoteState::Unpaid, None, 0)
+        );
+
+        send.state = LightningSendIntentState::NeedsReview {
+            reason: "ambiguous external result".to_string(),
+            failed_at: 0,
+        };
+        assert_eq!(
+            BarkBackend::lightning_send_response_details(&send).unwrap(),
+            (MeltQuoteState::Pending, None, 0)
+        );
     }
 
     #[test]

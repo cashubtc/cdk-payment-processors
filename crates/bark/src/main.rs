@@ -1,13 +1,10 @@
-mod backend;
-mod settings;
-
-use crate::backend::BarkBackend;
-use crate::settings::Config;
 use anyhow::{Context, Result};
 use cdk_common::grpc::create_version_check_interceptor;
 use cdk_payment_processor::{
     CdkPaymentProcessorServer, PaymentProcessorServer as PaymentProcessorService,
 };
+use cdk_payment_processor_bark::backend::BarkBackend;
+use cdk_payment_processor_bark::settings::Config;
 use std::{
     fs,
     net::{IpAddr, SocketAddr},

@@ -26,3 +26,6 @@ network = "mainnet"
 
 # Data directory for SQLite database
 data_dir = ".data/bark"
+
+# Delay between payment event polling passes in milliseconds (must be > 0)
+event_poll_interval_ms = 5000

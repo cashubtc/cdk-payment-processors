@@ -1,0 +1,75 @@
+name: Bark Regtest
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Cargo.lock'
+      - 'crates/bark/**'
+      - '.github/workflows/bark-regtest.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Cargo.lock'
+      - 'crates/bark/**'
+      - '.github/workflows/bark-regtest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bark-regtest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  regtest:
+    name: Full Bark payment flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: crates/bark
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Cache Cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-bark-regtest-${{ hashFiles('Cargo.lock', 'crates/bark/Cargo.toml', 'crates/bark/flake.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bark-regtest-
+
+      - name: Run Bark Regtest suite
+        timeout-minutes: 75
+        run: nix develop --accept-flake-config .#integration --command just test-regtest
+
+      - name: Upload daemon logs and databases
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: bark-regtest-${{ github.run_id }}
+          path: target/bark-regtest/cdk-payment-processor/bark-regtest
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14
