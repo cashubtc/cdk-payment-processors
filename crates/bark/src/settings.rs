@@ -26,6 +26,10 @@ pub struct BackendConfig {
     /// Data directory for SQLite database
     #[serde(default = "default_data_dir")]
     pub data_dir: String,
+
+    /// Interval between payment event polling passes, in milliseconds
+    #[serde(default = "default_event_poll_interval_ms")]
+    pub event_poll_interval_ms: u64,
 }
 
 fn default_server_address() -> String {
@@ -44,6 +48,10 @@ fn default_data_dir() -> String {
     ".data/bark".to_string()
 }
 
+fn default_event_poll_interval_ms() -> u64 {
+    5_000
+}
+
 impl Default for BackendConfig {
     fn default() -> Self {
         Self {
@@ -52,6 +60,7 @@ impl Default for BackendConfig {
             esplora_address: default_esplora_address(),
             network: default_network(),
             data_dir: default_data_dir(),
+            event_poll_interval_ms: default_event_poll_interval_ms(),
         }
     }
 }
@@ -140,6 +149,11 @@ impl Config {
         if let Ok(v) = std::env::var("BARK_DATA_DIR") {
             cfg.backend.data_dir = v;
         }
+        if let Ok(v) = std::env::var("BARK_EVENT_POLL_INTERVAL_MS") {
+            cfg.backend.event_poll_interval_ms = v
+                .parse()
+                .with_context(|| format!("invalid BARK_EVENT_POLL_INTERVAL_MS value `{v}`"))?;
+        }
 
         // Server configuration
         if let Ok(v) = std::env::var("SERVER_ADDRESS") {
@@ -160,11 +174,19 @@ impl Config {
             cfg.tls_key_path = v;
         }
 
+        cfg.validate()?;
         Ok(cfg)
     }
 
     pub fn from_env() -> Result<Self> {
         Self::load()
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.backend.event_poll_interval_ms == 0 {
+            bail!("BARK_EVENT_POLL_INTERVAL_MS must be greater than zero");
+        }
+        Ok(())
     }
 }
 
@@ -177,5 +199,50 @@ fn parse_bool_env(name: &str, value: &str) -> Result<bool> {
         "1" | "true" | "yes" | "on" => Ok(true),
         "0" | "false" | "no" | "off" => Ok(false),
         _ => bail!("invalid {name} value `{value}`; expected true or false"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_include_a_nonzero_event_poll_interval() {
+        let config = Config::default();
+        assert_eq!(config.backend.event_poll_interval_ms, 5_000);
+        config.validate().expect("default config is valid");
+    }
+
+    #[test]
+    fn zero_event_poll_interval_is_rejected() {
+        let mut config = Config::default();
+        config.backend.event_poll_interval_ms = 0;
+        let error = config.validate().unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("BARK_EVENT_POLL_INTERVAL_MS must be greater than zero"));
+    }
+
+    #[test]
+    fn toml_can_override_the_event_poll_interval() {
+        let figment = Figment::from(Serialized::defaults(Config::default())).merge(Toml::string(
+            r#"
+                [backend]
+                event_poll_interval_ms = 125
+            "#,
+        ));
+        let config = extract_config(figment).expect("parse test config");
+        assert_eq!(config.backend.event_poll_interval_ms, 125);
+    }
+
+    #[test]
+    fn boolean_environment_values_are_strict_but_friendly() {
+        for value in ["1", "true", "TRUE", "yes", "on"] {
+            assert!(parse_bool_env("TLS_ENABLE", value).unwrap());
+        }
+        for value in ["0", "false", "FALSE", "no", "off"] {
+            assert!(!parse_bool_env("TLS_ENABLE", value).unwrap());
+        }
+        assert!(parse_bool_env("TLS_ENABLE", "sometimes").is_err());
     }
 }

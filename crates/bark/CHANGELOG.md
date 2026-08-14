@@ -20,24 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Durable receive and send state backed by SQLite and redb, including quote
   mappings, restart reconciliation, retry/review states, and event
   deduplication.
-- Zero-fee arkoor routing for valid Ark destinations, with Lightning fallback.
+- A durable custom `arkoor` payment method for Ark-native destinations, with
+  zero-fee quotes, idempotent sends, status reconciliation, and terminal event
+  delivery.
 - Configuration through an optional `config.toml` file and `BARK_*` and
   `SERVER_*` environment variables.
 - Graceful shutdown on `SIGINT` and `SIGTERM`.
 - Bark wallet balance logging during startup.
 - Development tooling through a Nix flake, GitHub Actions, and a `justfile`.
+- Deterministic configuration and payment-state contract tests.
 
 ### Changed
 
 - Updated the CDK integration to `cdk-common` and `cdk-payment-processor`
   `0.17.3`.
-- Updated the Bark dependency stack from `0.3.0` to `0.5.0` and adapted the
+- Updated the Bark dependency stack from `0.3.0` to `0.6.1` and adapted the
   backend to Bark's shared on-chain wallet and settled Lightning receive APIs.
 - On-chain receives now board only the detected deposit UTXO by building and
   signing its funding transaction locally before passing it to
   `Wallet::board_tx`.
 - Payment event polling now rotates across Lightning and on-chain receives and
-  sends, with bounded scans and persisted cursors for large state histories.
+  sends (including arkoor), with bounded scans and persisted cursors for large
+  state histories. Its interval is configurable with
+  `BARK_EVENT_POLL_INTERVAL_MS`.
 - Renamed the backend and configuration from Ark to Bark and consolidated the
   implementation in `src/backend.rs`.
 - Changed the default network and public Bark/Esplora endpoints from signet to
@@ -48,7 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.toml.example`; local `config.toml` files are ignored.
 - Rewrote the README around the implemented Bark processor and removed the
   generic payment processor template guide.
-
 ### Fixed
 
 - Lightning melt quotes now use Bark's current Ark fee estimate, payment
@@ -79,6 +83,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Concurrent on-chain receive processing and background outgoing
   reconciliation ticks are skipped instead of queued behind work already in
   progress.
+- Unsupported `BARK_NETWORK` values now fail during startup instead of silently
+  selecting Signet.
+- BOLT11 receive responses now report an absolute Unix expiry, and expired
+  outgoing invoices are rejected before quoting or payment.
+- Replaced the unreachable attempt to parse a BOLT11 invoice as an Ark address
+  with the explicit CDK custom `arkoor` method.
+- Failed outgoing Lightning payments are now reconciled from Bark's durable
+  movement history after Bark removes their payment checkpoint, allowing
+  terminal failure events and Cashu proof compensation to complete.
 
 ### Removed
 
