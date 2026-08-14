@@ -1,5 +1,16 @@
 {
-  description = "CDK Flake";
+  description = "CDK Payment Processor for Bark Flake";
+
+  nixConfig = {
+    extra-substituters = [
+      "https://cache.cashudevkit.org"
+      "https://cashudevkit.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "cashudevkit:Ukc9ltM4674fDHWWay+q4vdHDYKF48QIm6A+0z5/FqQ="
+      "cashudevkit.cachix.org-1:zFKdvMiTllKWxIFNTjXgisZsOFufmaZXjWJNcmc8r+4="
+    ];
+  };
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -11,17 +22,7 @@
       };
     };
 
-    fenix = {
-      url = "github:nix-community/fenix";
-      inputs.nixpkgs.follows = "nixpkgs";
-      inputs.rust-analyzer-src.follows = "";
-    };
-
     flake-utils.url = "github:numtide/flake-utils";
-
-    crane = {
-      url = "github:ipetkov/crane";
-    };
 
     pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   };
@@ -41,13 +42,10 @@
         lib = pkgs.lib;
         stdenv = pkgs.stdenv;
         isDarwin = stdenv.isDarwin;
-        libsDarwin =
-          with pkgs;
-          lib.optionals isDarwin [
-            # Additional darwin specific inputs can be set here
-            darwin.apple_sdk.frameworks.Security
-            darwin.apple_sdk.frameworks.SystemConfiguration
-          ];
+        libsDarwin = lib.optionals isDarwin [
+          # Additional drwin specific inputs can be set here
+          # Note: Security and SystemConfiguration frameworks are provided by the default SDK
+        ];
 
         # Dependencies
         pkgs = import nixpkgs {

@@ -1,41 +1,5 @@
 {
   "nodes": {
-    "crane": {
-      "locked": {
-        "lastModified": 1759893430,
-        "narHash": "sha256-yAy4otLYm9iZ+NtQwTMEbqHwswSFUbhn7x826RR6djw=",
-        "owner": "ipetkov",
-        "repo": "crane",
-        "rev": "1979a2524cb8c801520bd94c38bb3d5692419d93",
-        "type": "github"
-      },
-      "original": {
-        "owner": "ipetkov",
-        "repo": "crane",
-        "type": "github"
-      }
-    },
-    "fenix": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "rust-analyzer-src": []
-      },
-      "locked": {
-        "lastModified": 1760683279,
-        "narHash": "sha256-4XZVvUQEG5E+DdrOKXeZPD2uFQSYSK3YHBryHdZjpuU=",
-        "owner": "nix-community",
-        "repo": "fenix",
-        "rev": "4cb5a965947d39ce5b8cc10dbd581f07ee8cbd8a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-community",
-        "repo": "fenix",
-        "type": "github"
-      }
-    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -145,8 +109,6 @@
     },
     "root": {
       "inputs": {
-        "crane": "crane",
-        "fenix": "fenix",
         "flake-utils": "flake-utils",
         "nixpkgs": "nixpkgs",
         "pre-commit-hooks": "pre-commit-hooks",
