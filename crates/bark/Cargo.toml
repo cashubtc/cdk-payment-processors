@@ -6,6 +6,18 @@ authors = ["thesimplekid <tsk@thesimplekid.com>"]
 description = "CDK Payment Processor backed by a Bark wallet"
 license = "MIT"
 
+[features]
+default = []
+regtest-tests = [
+    "dep:ark-testing",
+    "dep:axum",
+    "dep:bark-cln-rpc",
+    "dep:bitcoincore-rpc",
+    "dep:cdk",
+    "dep:cdk-axum",
+    "dep:cdk-sqlite",
+]
+
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
@@ -15,10 +27,12 @@ figment = { version = "0.10", features = ["env", "toml"] }
 futures-core = "0.3"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "process", "sync", "net"] }
 tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# bark
 
 ark-lib = "0.6.1"
 bark-bitcoin-ext = "0.6.1"
@@ -31,3 +45,18 @@ lightning-invoice = "0.34"
 redb = "4.1.0"
 serde_json = "1"
 uuid = { version = "1.0", features = ["v4"] }
+
+# bark regtest tests
+
+ark-testing = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.1", optional = true }
+axum = { version = "0.8", optional = true }
+bark-cln-rpc = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.1", optional = true }
+bitcoincore-rpc = { version = "0.19", optional = true }
+cdk = { version = "0.17.3", default-features = false, features = ["mint", "wallet"], optional = true }
+cdk-axum = { version = "0.17.3", optional = true }
+cdk-sqlite = { version = "0.17.3", default-features = false, features = ["mint", "wallet"], optional = true }
+
+[[test]]
+name = "regtest"
+path = "tests/regtest.rs"
+required-features = ["regtest-tests"]

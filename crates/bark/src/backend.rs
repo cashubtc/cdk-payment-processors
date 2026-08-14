@@ -923,6 +923,46 @@ impl BarkBackend {
         })
     }
 
+    /// Return the spendable Bark balance for the opt-in regtest harness.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_spendable_balance_sat(&self) -> anyhow::Result<u64> {
+        Ok(self.wallet.balance().await?.spendable.to_sat())
+    }
+
+    /// Derive and persist the next Ark address for lifecycle tests.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_new_ark_address(&self) -> anyhow::Result<String> {
+        Ok(self.wallet.new_address().await?.to_string())
+    }
+
+    /// Return a previously derived Ark address for lifecycle tests.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_peek_ark_address(&self, index: u32) -> anyhow::Result<String> {
+        Ok(self.wallet.peek_address(index).await?.to_string())
+    }
+
+    /// Count Bark movements for one Lightning payment hash. This lets the
+    /// opt-in topology test verify that concurrent retries create one external
+    /// payment, independently of the processor's cached response.
+    #[cfg(feature = "regtest-tests")]
+    #[doc(hidden)]
+    pub async fn regtest_lightning_movement_count(
+        &self,
+        payment_hash: [u8; 32],
+    ) -> anyhow::Result<usize> {
+        let payment_hash = PaymentHash::from(payment_hash);
+        Ok(self
+            .wallet
+            .history()
+            .await?
+            .into_iter()
+            .filter(|movement| movement.lightning_payment_hash() == Some(payment_hash))
+            .count())
+    }
+
     fn parse_bitcoin_address(
         &self,
         address: &str,

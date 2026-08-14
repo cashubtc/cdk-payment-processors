@@ -159,11 +159,58 @@ cargo fmt -- --check
 cargo clippy -- -D warnings
 ```
 
+### Full Regtest suite
+
+The ordinary test command runs deterministic unit and persistence-contract
+tests. The full suite is opt-in because it launches Bitcoin Core, Esplora,
+PostgreSQL, two balanced Core Lightning nodes, a Bark server, the real
+payment-processor binary, a CDK mint, and a CDK wallet.
+
+Run it from this directory with Nix:
+
+```bash
+just regtest
+```
+
+The integration shell and the Cargo test harness are pinned to Bark commit
+`bark-0.6.1`, matching Bark `0.6.1`. Linux runs Core Lightning directly;
+on macOS, Bark's upstream harness uses Docker, so a Docker daemon must be
+running. To use an already prepared environment, run `just test-regtest`.
+The integration shell supplies only the pinned service binaries, required
+sibling tools such as `bitcoin-cli`, and their matching native runtime library
+paths; it reuses `cargo` and `rustc` from the caller's PATH. Install stable Rust
+first, or enter the default `nix develop` shell before running `just regtest`.
+
+The suite covers:
+
+- fresh-wallet validation, identity and restart behavior, data-directory
+  locking in-process and from a second real processor, insufficient funds, and
+  network/endpoint failures;
+- Lightning receive/send through status polling and event streams, including
+  payment-hash correlation, expired incoming invoices, concurrency, exact
+  amounts, fee caps, preimages, idempotency verified against Bark's movement
+  history, unreachable destinations with balance recovery, and held payments
+  completed across backend restarts;
+- on-chain deposit/boarding and offboard sends, confirmation boundaries,
+  retries, restarts, fees, wrong-network addresses, fee-index rejection, and a
+  one-block reorg;
+- the custom arkoor route and zero-fee accounting;
+- black-box calls through the real gRPC process; and
+- full Cashu mint/melt transitions, proof accounting and compensation,
+  out-of-order quote correlation, unused fee-reserve return, and a pending
+  melt recovered after both the mint and processor restart.
+
+All network waits use polling deadlines. The test is marked ignored so
+`cargo test --all-features` compiles it without trying to launch services.
+Runs keep the service logs and databases under
+`../../target/bark-regtest/cdk-payment-processor/bark-regtest/` for diagnosis.
+
 ## Project layout
 
 ```text
 src/
 ├── backend.rs   # Bark implementation of MintPayment
+├── lib.rs       # Library entry point used by the black-box harness
 ├── main.rs      # gRPC server startup and shutdown
 └── settings.rs  # config.toml and environment loading
 ```

@@ -28,7 +28,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Graceful shutdown on `SIGINT` and `SIGTERM`.
 - Bark wallet balance logging during startup.
 - Development tooling through a Nix flake, GitHub Actions, and a `justfile`.
-- Deterministic configuration and payment-state contract tests.
+- Deterministic configuration and payment-state contract tests, plus an
+  opt-in, black-box Regtest suite covering wallet lifecycle, Lightning,
+  on-chain, arkoor, real gRPC process restarts, and full CDK mint/melt flows.
+- Held-HTLC Regtest coverage for concurrent first-attempt deduplication,
+  pending Lightning and Cashu melt recovery across restarts, actual movement
+  counts, expired receives, process-level wallet locking, insufficient-funds
+  balance safety, and unused fee-reserve return.
+- A library target so integration tests and downstream tooling can construct
+  the Bark backend without embedding the service binary.
 
 ### Changed
 
@@ -53,6 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.toml.example`; local `config.toml` files are ignored.
 - Rewrote the README around the implemented Bark processor and removed the
   generic payment processor template guide.
+- Pinned the Regtest Cargo harness and Nix service environment to the exact
+  upstream Bark commit corresponding to the tested `0.6.1` implementation.
+- Kept the Regtest Nix shell runtime-only: it supplies the pinned service
+  binaries while reusing the caller's Rust toolchain.
+
 ### Fixed
 
 - Lightning melt quotes now use Bark's current Ark fee estimate, payment
@@ -92,6 +105,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Failed outgoing Lightning payments are now reconciled from Bark's durable
   movement history after Bark removes their payment checkpoint, allowing
   terminal failure events and Cashu proof compensation to complete.
+- The Regtest Nix shell now inherits Bark's pinned native runtime library path
+  and exposes its matching `bitcoin-cli`, allowing Esplora Electrs and Core
+  Lightning to start on Linux CI runners.
 
 ### Removed
 
