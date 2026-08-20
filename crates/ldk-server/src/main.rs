@@ -23,6 +23,9 @@ use tracing_subscriber::EnvFilter;
 use crate::backend::{Config as BackendConfig, LdkServerBackend};
 use crate::settings::Config;
 
+const INSECURE_GUIDANCE: &str = "configure TLS with tls_enable = true and \
+    tls_cert_path/tls_key_path, or set allow_insecure = true to accept cleartext traffic";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -30,6 +33,13 @@ async fn main() -> Result<()> {
         .init();
 
     let cfg = Config::load()?;
+    let socket_addr = SocketAddr::new(
+        cfg.address
+            .parse::<IpAddr>()
+            .with_context(|| format!("invalid listen address {}", cfg.address))?,
+        cfg.port,
+    );
+    let mut server_builder = grpc_server_builder(&cfg, socket_addr)?;
 
     let cert_pem = fs::read(&cfg.backend.tls_cert_path).with_context(|| {
         format!(
@@ -50,13 +60,6 @@ async fn main() -> Result<()> {
     };
     let backend = Arc::new(LdkServerBackend::new(backend_cfg)?);
 
-    let socket_addr = SocketAddr::new(
-        cfg.address
-            .parse::<IpAddr>()
-            .with_context(|| format!("invalid listen address {}", cfg.address))?,
-        cfg.port,
-    );
-
     let scheme = if cfg.tls_enable { "https" } else { "http" };
     tracing::info!(
         "Starting LDK Server payment processor on {}://{}:{} (node at {})",
@@ -75,7 +78,7 @@ async fn main() -> Result<()> {
         ),
     );
 
-    let server = grpc_server_builder(&cfg)?
+    let server = server_builder
         .add_service(service)
         .serve_with_shutdown(socket_addr, async {
             match shutdown_signal().await {
@@ -89,9 +92,9 @@ async fn main() -> Result<()> {
     // Fail fast instead of serving nothing if the gRPC endpoint is not really
     // reachable (e.g. a conflicting listener raced us to the port).
     if !cfg.tls_enable {
-        self_check(&cfg.address, cfg.port).await?;
+        self_check(socket_addr).await?;
     } else {
-        tracing::info!("TLS enabled: skipping insecure loopback self-check");
+        tracing::info!("TLS enabled: skipping plaintext self-check");
     }
 
     match serve_task.await {
@@ -102,10 +105,11 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-/// Verify our own gRPC service answers GetSettings over loopback.
-async fn self_check(addr: &str, port: u16) -> Result<()> {
+/// Verify our own gRPC service answers GetSettings from the local host.
+async fn self_check(socket_addr: SocketAddr) -> Result<()> {
     // cdk-payment-processor 0.17.3 client does not prepend a scheme.
-    let endpoint = format!("http://{addr}");
+    let endpoint = self_check_endpoint(socket_addr);
+    let port = socket_addr.port();
     for attempt in 1..=10u8 {
         let attempt_result: Result<()> = async {
             let client = tokio::time::timeout(
@@ -142,11 +146,37 @@ async fn self_check(addr: &str, port: u16) -> Result<()> {
     );
 }
 
-fn grpc_server_builder(cfg: &Config) -> Result<Server> {
+fn self_check_endpoint(socket_addr: SocketAddr) -> String {
+    let check_ip = match socket_addr.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => std::net::Ipv4Addr::LOCALHOST.into(),
+        IpAddr::V6(ip) if ip.is_unspecified() => std::net::Ipv6Addr::LOCALHOST.into(),
+        ip => ip,
+    };
+    match check_ip {
+        IpAddr::V4(ip) => format!("http://{ip}"),
+        IpAddr::V6(ip) => format!("http://[{ip}]"),
+    }
+}
+
+fn grpc_server_builder(cfg: &Config, socket_addr: SocketAddr) -> Result<Server> {
     let server = Server::builder();
 
     if !cfg.tls_enable {
-        tracing::warn!("TLS is disabled; starting an insecure gRPC server");
+        anyhow::ensure!(
+            cfg.allow_insecure,
+            "payment processor TLS is required: {INSECURE_GUIDANCE}"
+        );
+        if socket_addr.ip().is_loopback() {
+            tracing::warn!(
+                bind_address = %socket_addr,
+                "TLS is disabled; starting an explicitly allowed insecure gRPC server"
+            );
+        } else {
+            tracing::warn!(
+                bind_address = %socket_addr,
+                "TLS is disabled on a non-loopback bind; cleartext payment RPCs may be exposed to the network"
+            );
+        }
         return Ok(server);
     }
 
@@ -193,4 +223,56 @@ async fn shutdown_signal() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn insecure_config(address: &str, allow_insecure: bool) -> Config {
+        Config {
+            address: address.to_owned(),
+            allow_insecure,
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn plaintext_without_explicit_opt_in_is_rejected() {
+        let config = insecure_config("127.0.0.1", false);
+        let error = match grpc_server_builder(&config, "127.0.0.1:50051".parse().unwrap()) {
+            Ok(_) => panic!("plaintext without opt-in must fail"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains(INSECURE_GUIDANCE));
+    }
+
+    #[test]
+    fn explicitly_insecure_loopback_is_allowed() {
+        let config = insecure_config("127.0.0.1", true);
+
+        grpc_server_builder(&config, "127.0.0.1:50051".parse().unwrap())
+            .expect("explicit loopback development mode should be allowed");
+    }
+
+    #[test]
+    fn explicitly_insecure_non_loopback_is_allowed() {
+        let config = insecure_config("0.0.0.0", true);
+
+        grpc_server_builder(&config, "0.0.0.0:50051".parse().unwrap())
+            .expect("explicit insecure mode should allow a Docker-compatible bind");
+    }
+
+    #[test]
+    fn self_check_uses_loopback_for_unspecified_docker_bind() {
+        assert_eq!(
+            self_check_endpoint("0.0.0.0:50051".parse().unwrap()),
+            "http://127.0.0.1"
+        );
+        assert_eq!(
+            self_check_endpoint("[::]:50051".parse().unwrap()),
+            "http://[::1]"
+        );
+    }
 }

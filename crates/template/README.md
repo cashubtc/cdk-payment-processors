@@ -352,6 +352,7 @@ The template provides these base configuration options:
 - `SERVER_ADDRESS` - gRPC server bind address (default: 127.0.0.1)
 - `SERVER_PORT` - gRPC server port (default: 50051)
 - `TLS_ENABLE` - Enable TLS (default: false)
+- `ALLOW_INSECURE` - Explicitly allow plaintext gRPC (default: false)
 - `TLS_CERT_PATH` - Path to a PEM-encoded TLS certificate or certificate chain (default: certs/server.crt)
 - `TLS_KEY_PATH` - Path to the PEM-encoded TLS private key (default: certs/server.key)
 - `KEEP_ALIVE_INTERVAL` - HTTP/2 keep-alive interval (e.g., "30s")
@@ -368,6 +369,7 @@ You can also use a `config.toml` file:
 address = "127.0.0.1"
 port = 50051
 tls_enable = false
+allow_insecure = true # Explicit cleartext opt-in
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
 
@@ -384,9 +386,12 @@ PEM-encoded server certificate or certificate chain, and `tls_key_path` must
 point to its PEM-encoded private key. The process fails during startup if
 either file cannot be read or the TLS identity is invalid.
 
-When TLS is disabled, bind to loopback or terminate TLS in front of the
-service; do not expose the plaintext gRPC port directly to an untrusted
-network.
+Without TLS, startup fails unless `allow_insecure = true` (or
+`ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits cleartext
+on any bind address so it can be used in containers; startup logs a warning
+with the effective address and a stronger exposure warning for non-loopback
+binds. Configure TLS with `tls_enable = true` and
+`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
 
 ## gRPC API
 
@@ -441,6 +446,8 @@ docker build -t my-payment-processor .
 
 # Run with environment variables
 docker run -p 50051:50051 \
+  -e SERVER_ADDRESS="0.0.0.0" \
+  -e ALLOW_INSECURE="true" \
   -e API_KEY="your-key" \
   -e API_URL="https://api.example.com" \
   my-payment-processor
