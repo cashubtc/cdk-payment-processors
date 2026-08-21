@@ -64,6 +64,9 @@ pub struct Config {
     /// TLS for the payment processor gRPC server.
     #[serde(default)]
     pub tls_enable: bool,
+    /// Explicitly allow plaintext gRPC.
+    #[serde(default)]
+    pub allow_insecure: bool,
     #[serde(default = "default_tls_cert_path")]
     pub tls_cert_path: String,
     #[serde(default = "default_tls_key_path")]
@@ -84,6 +87,20 @@ fn default_tls_cert_path() -> String {
 
 fn default_tls_key_path() -> String {
     "certs/server.key".to_string()
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            backend: BackendConfig::default(),
+            address: default_address(),
+            port: default_port(),
+            tls_enable: false,
+            allow_insecure: false,
+            tls_cert_path: default_tls_cert_path(),
+            tls_key_path: default_tls_key_path(),
+        }
+    }
 }
 
 impl Config {
@@ -108,16 +125,5 @@ impl Config {
             "backend.tls_cert_path is required"
         );
         Ok(cfg)
-    }
-
-    fn default() -> Self {
-        Self {
-            backend: BackendConfig::default(),
-            address: default_address(),
-            port: default_port(),
-            tls_enable: false,
-            tls_cert_path: default_tls_cert_path(),
-            tls_key_path: default_tls_key_path(),
-        }
     }
 }

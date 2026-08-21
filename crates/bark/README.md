@@ -61,6 +61,7 @@ cp config.toml.example config.toml
 | `address` | `SERVER_ADDRESS` | `127.0.0.1` |
 | `port` | `SERVER_PORT` | `50051` |
 | `tls_enable` | `TLS_ENABLE` | `false` |
+| `allow_insecure` | `ALLOW_INSECURE` | `false` |
 | `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
 
@@ -131,9 +132,12 @@ PEM-encoded server certificate or certificate chain, and `tls_key_path` must
 point to its PEM-encoded private key. The process fails during startup if
 either file cannot be read or the TLS identity is invalid.
 
-When TLS is disabled, bind to loopback or terminate TLS in front of the
-service; do not expose the plaintext gRPC port directly to an untrusted
-network.
+Without TLS, startup fails unless `allow_insecure = true` (or
+`ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits cleartext
+on any bind address so it can be used in containers; startup logs a warning
+with the effective address and a stronger exposure warning for non-loopback
+binds. Configure TLS with `tls_enable = true` and
+`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
 
 The process handles `SIGINT` and `SIGTERM` and stops the gRPC server
 gracefully.

@@ -86,6 +86,9 @@ pub struct Config {
     /// TLS config for gRPC server
     #[serde(default)]
     pub tls_enable: bool,
+    /// Explicitly allow plaintext gRPC.
+    #[serde(default)]
+    pub allow_insecure: bool,
     #[serde(default = "default_tls_cert_path")]
     pub tls_cert_path: String,
     #[serde(default = "default_tls_key_path")]
@@ -115,6 +118,7 @@ impl Default for Config {
             address: default_address(),
             port: default_port(),
             tls_enable: false,
+            allow_insecure: false,
             tls_cert_path: default_tls_cert_path(),
             tls_key_path: default_tls_key_path(),
         }
@@ -166,6 +170,9 @@ impl Config {
         }
         if let Ok(v) = std::env::var("TLS_ENABLE") {
             cfg.tls_enable = parse_bool_env("TLS_ENABLE", &v)?;
+        }
+        if let Ok(v) = std::env::var("ALLOW_INSECURE") {
+            cfg.allow_insecure = parse_bool_env("ALLOW_INSECURE", &v)?;
         }
         if let Ok(v) = std::env::var("TLS_CERT_PATH") {
             cfg.tls_cert_path = v;

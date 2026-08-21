@@ -41,6 +41,7 @@ export SPARK_DATA_DIR=".data/spark"
 export SERVER_ADDRESS="127.0.0.1"
 export SERVER_PORT="50051"
 export TLS_ENABLE="false"
+export ALLOW_INSECURE="true" # Explicit cleartext opt-in
 export TLS_CERT_PATH="certs/server.crt"
 export TLS_KEY_PATH="certs/server.key"
 ```
@@ -59,6 +60,7 @@ address = "127.0.0.1"
 port = 50051
 
 tls_enable = false
+allow_insecure = true # Explicit cleartext opt-in
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
 
@@ -72,9 +74,12 @@ PEM-encoded server certificate or certificate chain, and `tls_key_path` must
 point to its PEM-encoded private key. The process fails during startup if
 either file cannot be read or the TLS identity is invalid.
 
-When TLS is disabled, bind to loopback or terminate TLS in front of the
-service; do not expose the plaintext gRPC port directly to an untrusted
-network.
+Without TLS, startup fails unless `allow_insecure = true` (or
+`ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits cleartext
+on any bind address so it can be used in containers; startup logs a warning
+with the effective address and a stronger exposure warning for non-loopback
+binds. Configure TLS with `tls_enable = true` and
+`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
 
 The processor stores `quotes.db` inside `data_dir`, which defaults to
 `.data/spark`. It contains invoices together with their Spark SSP request IDs
@@ -88,7 +93,8 @@ cargo check
 RUST_LOG=info cargo run
 ```
 
-The gRPC server listens on `127.0.0.1:50051` by default.
+With TLS configured, or with the explicit insecure opt-in shown above, the
+gRPC server listens on `127.0.0.1:50051` by default.
 After connecting, the processor logs the current Spark balance at `info` level.
 If the balance cannot be retrieved, it logs a warning and continues starting.
 

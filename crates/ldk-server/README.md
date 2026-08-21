@@ -34,6 +34,7 @@ See [config.toml.example](config.toml.example). Every value can also be set via 
 |---|---|---|
 | `address` / `port` | gRPC listen address for the processor | `127.0.0.1:50051` |
 | `tls_enable` | TLS for the processor gRPC server | `false` |
+| `allow_insecure` | Explicitly allow plaintext gRPC | `false` |
 | `backend.address` | LDK Server gRPC address (no scheme) | required |
 | `backend.api_key` | LDK Server HMAC API key (hex) | required |
 | `backend.tls_cert_path` | PEM certificate pinned for the LDK Server connection | required |
@@ -41,9 +42,19 @@ See [config.toml.example](config.toml.example). Every value can also be set via 
 | `backend.fee_reserve_percent` | Relative melt fee reserve (`0.01` = 1%) | `0.01` |
 | `backend.max_payment_scan_pages` | `ListPayments` pages scanned for status lookups | `32` |
 
+Without TLS, startup fails unless `allow_insecure = true` (or
+`CDK_LDK_ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits
+cleartext on any bind address so it can be used in containers; startup logs a
+warning with the effective address and a stronger exposure warning for
+non-loopback binds. Configure TLS with `tls_enable = true` and
+`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
+
 ## Startup self-check
 
-After binding, the processor calls its own `GetSettings` over loopback and **exits non-zero** if it does not answer. This fails fast on port conflicts instead of looking healthy while another service owns the port.
+After binding, the processor calls its own `GetSettings` from the local host
+(using loopback for unspecified addresses such as `0.0.0.0`) and **exits
+non-zero** if it does not answer. This fails fast on port conflicts instead of
+looking healthy while another service owns the port.
 
 ## Notes
 

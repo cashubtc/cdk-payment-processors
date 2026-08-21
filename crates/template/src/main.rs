@@ -17,6 +17,9 @@ use tokio::signal;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tracing_subscriber::EnvFilter;
 
+const INSECURE_GUIDANCE: &str = "configure TLS with tls_enable = true and \
+    tls_cert_path/tls_key_path, or set allow_insecure = true to accept cleartext traffic";
+
 #[tokio::main]
 async fn main() -> Result<()> {
     // Logging
@@ -25,13 +28,13 @@ async fn main() -> Result<()> {
         .init();
 
     let cfg = Config::from_env()?;
-    let mut server_builder = grpc_server_builder(&cfg)?;
     let socket_addr = SocketAddr::new(
         cfg.address
             .parse::<IpAddr>()
             .with_context(|| format!("invalid server address `{}`", cfg.address))?,
         cfg.port,
     );
+    let mut server_builder = grpc_server_builder(&cfg, socket_addr)?;
 
     // TODO: Initialize your Lightning backend here
     // For now, we use the template backend which will panic with todo!() on any method call
@@ -67,11 +70,25 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-fn grpc_server_builder(cfg: &Config) -> Result<Server> {
+fn grpc_server_builder(cfg: &Config, socket_addr: SocketAddr) -> Result<Server> {
     let server = Server::builder();
 
     if !cfg.tls_enable {
-        tracing::warn!("TLS is disabled; starting an insecure gRPC server");
+        anyhow::ensure!(
+            cfg.allow_insecure,
+            "payment processor TLS is required: {INSECURE_GUIDANCE}"
+        );
+        if socket_addr.ip().is_loopback() {
+            tracing::warn!(
+                bind_address = %socket_addr,
+                "TLS is disabled; starting an explicitly allowed insecure gRPC server"
+            );
+        } else {
+            tracing::warn!(
+                bind_address = %socket_addr,
+                "TLS is disabled on a non-loopback bind; cleartext payment RPCs may be exposed to the network"
+            );
+        }
         return Ok(server);
     }
 
@@ -118,4 +135,44 @@ async fn shutdown_signal() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn insecure_config(address: &str, allow_insecure: bool) -> Config {
+        Config {
+            address: address.to_owned(),
+            allow_insecure,
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn plaintext_without_explicit_opt_in_is_rejected() {
+        let config = insecure_config("127.0.0.1", false);
+        let error = match grpc_server_builder(&config, "127.0.0.1:50051".parse().unwrap()) {
+            Ok(_) => panic!("plaintext without opt-in must fail"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains(INSECURE_GUIDANCE));
+    }
+
+    #[test]
+    fn explicitly_insecure_loopback_is_allowed() {
+        let config = insecure_config("127.0.0.1", true);
+
+        grpc_server_builder(&config, "127.0.0.1:50051".parse().unwrap())
+            .expect("explicit loopback development mode should be allowed");
+    }
+
+    #[test]
+    fn explicitly_insecure_non_loopback_is_allowed() {
+        let config = insecure_config("0.0.0.0", true);
+
+        grpc_server_builder(&config, "0.0.0.0:50051".parse().unwrap())
+            .expect("explicit insecure mode should allow a Docker-compatible bind");
+    }
 }
