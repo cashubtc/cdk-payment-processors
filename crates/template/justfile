@@ -54,7 +54,7 @@ docker-build:
 
 # Run Docker container
 docker-run:
-    docker run -p 50051:50051 cdk-payment-processor-template
+    docker run -p 50051:50051 -e SERVER_ADDRESS=0.0.0.0 -e ALLOW_INSECURE=true cdk-payment-processor-template
 
 # Clean build artifacts
 clean:

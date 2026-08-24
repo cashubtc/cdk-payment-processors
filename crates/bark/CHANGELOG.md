@@ -68,6 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The payment processor now fails closed without TLS unless plaintext is
+  explicitly enabled with `allow_insecure`, warning more strongly when the
+  effective bind address is not loopback.
 - Lightning melt quotes now use Bark's current Ark fee estimate, payment
   execution fails closed when no fee cap is supplied or the current fee exceeds
   it, and settled `total_spent` uses Bark's actual recorded fee.
