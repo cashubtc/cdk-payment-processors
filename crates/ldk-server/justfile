@@ -1,0 +1,13 @@
+# CDK Payment Processor for LDK Server - Just commands
+
+# List available commands
+default:
+    @just --list
+
+# Run tests (unit tests only)
+test:
+    cargo test
+
+# Run the opt-in LDK Server Regtest suite
+test-regtest:
+    CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
