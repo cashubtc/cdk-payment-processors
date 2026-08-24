@@ -303,6 +303,7 @@ impl ProcessorProcess {
             )
             .env("SERVER_ADDRESS", "127.0.0.1")
             .env("SERVER_PORT", port.to_string())
+            .env("ALLOW_INSECURE", "true")
             .env("RUST_LOG", "debug")
             .stdout(stdout)
             .stderr(stderr)
