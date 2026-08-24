@@ -60,3 +60,6 @@ cdk-sqlite = { version = "0.17.3", default-features = false, features = ["mint",
 name = "regtest"
 path = "tests/regtest.rs"
 required-features = ["regtest-tests"]
+
+[dev-dependencies]
+figment = { version = "0.10", features = ["test"] }

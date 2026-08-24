@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend configuration structure matching config.toml
 
 ### Changed
+- Configuration environment variables are now applied through Figment
+  providers, and boolean environment values accept only `true` or `false`.
 - Updated `cdk-common` and `cdk-payment-processor` from 0.16.0-rc.1 to 0.17.3
 - Updated `redb` from 3.1.0 to 4.1.0
 - Made incoming quote persistence and outgoing transfer ID selection atomic

@@ -24,3 +24,6 @@ bitcoin = { version = "0.32.2", features = ["base64", "serde", "rand", "rand-std
 ldk-server-client = { git = "https://github.com/lightningdevkit/ldk-server", rev = "50fe7523be3529d86bfee0dfc35df9a52aca7310", default-features = false }
 lightning = { version = "0.2.0", default-features = false, features = ["std"] }
 tokio-util = "0.7"
+
+[dev-dependencies]
+figment = { version = "0.10", features = ["test"] }

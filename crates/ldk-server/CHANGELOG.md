@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A crate-local `Cargo.lock` for reproducible standalone builds.
 
+### Changed
+
+- Replaced the `CDK_LDK_*` environment namespace with shared `SERVER_*`,
+  `TLS_*`, and `ALLOW_INSECURE` variables plus backend-specific `LDK_*`
+  variables. Environment values are now applied through Figment providers,
+  and booleans accept only `true` or `false`.
+
 ### Fixed
 
 - The payment processor now fails closed without TLS unless plaintext is

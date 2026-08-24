@@ -14,9 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CONTRIBUTING.md with contribution guidelines
 - CHANGELOG.md for tracking changes
 - Backend configuration structure matching config.toml
-- HTTP/2 keep-alive configuration options
 
 ### Changed
+- Configuration environment variables are now applied through reusable
+  Figment providers, and boolean environment values accept only `true` or
+  `false`.
 - Made `TemplateBackend::new` asynchronous to match `BarkBackend::new` and
   support initialization that must be awaited.
 - Fixed TemplateBackend Default implementation to not panic

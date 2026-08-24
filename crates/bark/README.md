@@ -65,6 +65,9 @@ cp config.toml.example config.toml
 | `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
 
+Boolean environment variables accept only the literal values `true` and
+`false`.
+
 Supported network values are `mainnet`, `testnet`, `signet`, and `regtest`.
 Any other value causes the processor to fail during startup. The Bark server,
 Esplora endpoint, and network must refer to the same network.

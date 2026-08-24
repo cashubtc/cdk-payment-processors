@@ -54,6 +54,7 @@ See the [Implementation Guide](#implementation-guide) below for detailed steps.
 # Configure your backend
 export TEMPLATE_API_URL="your-api-url-here"
 export TEMPLATE_API_KEY="your-api-key-here"
+export ALLOW_INSECURE="true" # Local development only; use TLS in production
 
 # Run the server
 RUST_LOG=info cargo run --release
@@ -253,9 +254,12 @@ async fn create_invoice(
 
 #### 5. Update Configuration
 
-Add your backend-specific configuration to `src/settings.rs`:
+Add your backend-specific configuration to `src/settings.rs` and replace the
+template environment-variable prefix with one for your backend:
 
 ```rust
+const BACKEND_ENV_PREFIX: &str = "BLINK_";
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct BackendConfig {
     pub api_url: String,
@@ -269,22 +273,11 @@ pub struct Config {
 
     // Existing gRPC server configuration...
 }
-
-impl Config {
-    pub fn load() -> anyhow::Result<Self> {
-        // ... existing code ...
-        // Add environment variable loading
-        if let Ok(v) = std::env::var("TEMPLATE_API_URL") {
-
-            cfg.backend.api_url = v;
-        }
-        if let Ok(v) = std::env::var("TEMPLATE_API_KEY") {
-            cfg.backend.api_key = v;
-        }
-        Ok(cfg)
-    }
-}
 ```
+
+The existing Figment provider maps each prefixed variable to a field under
+`backend`, so `BLINK_API_URL` becomes `backend.api_url` without additional
+loading code.
 
 #### 6. Initialize Your Backend in main.rs
 
@@ -355,11 +348,12 @@ The template provides these base configuration options:
 - `ALLOW_INSECURE` - Explicitly allow plaintext gRPC (default: false)
 - `TLS_CERT_PATH` - Path to a PEM-encoded TLS certificate or certificate chain (default: certs/server.crt)
 - `TLS_KEY_PATH` - Path to the PEM-encoded TLS private key (default: certs/server.key)
-- `KEEP_ALIVE_INTERVAL` - HTTP/2 keep-alive interval (e.g., "30s")
-- `KEEP_ALIVE_TIMEOUT` - HTTP/2 keep-alive timeout (e.g., "10s")
-- `MAX_CONNECTION_AGE` - Maximum connection age (e.g., "30m")
 
-Add your own environment variables for backend-specific configuration.
+The example backend fields are available as `TEMPLATE_API_URL` and
+`TEMPLATE_API_KEY`. Change `BACKEND_ENV_PREFIX` when adapting the template;
+fields are converted from uppercase snake case to the matching field under
+`backend`. Boolean environment variables accept only the literal values
+`true` and `false`.
 
 ### config.toml
 
@@ -448,8 +442,8 @@ docker build -t my-payment-processor .
 docker run -p 50051:50051 \
   -e SERVER_ADDRESS="0.0.0.0" \
   -e ALLOW_INSECURE="true" \
-  -e API_KEY="your-key" \
-  -e API_URL="https://api.example.com" \
+  -e TEMPLATE_API_KEY="your-key" \
+  -e TEMPLATE_API_URL="https://api.example.com" \
   my-payment-processor
 ```
 

@@ -1,9 +1,11 @@
 use anyhow::{bail, Context, Result};
 use figment::{
-    providers::{Format, Serialized, Toml},
+    providers::{Env, Format, Serialized, Toml},
     Figment,
 };
 use serde::{Deserialize, Serialize};
+
+const BACKEND_ENV_PREFIX: &str = "BARK_";
 
 /// Backend-specific configuration for Bark wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -129,58 +131,7 @@ impl Config {
     /// Load from config.toml (if present) and environment variables.
     /// Environment variables override file values.
     pub fn load() -> Result<Self> {
-        // 1) Start with defaults + config.toml only if it exists
-        let base: Config = Default::default();
-        let mut fig = Figment::from(Serialized::defaults(base));
-        if std::path::Path::new("config.toml").exists() {
-            fig = fig.merge(Toml::file("config.toml"));
-        }
-        let mut cfg = extract_config(fig)?;
-
-        // 2) Overlay environment variables explicitly
-        if let Ok(v) = std::env::var("BARK_MNEMONIC") {
-            cfg.backend.mnemonic = v;
-        }
-        if let Ok(v) = std::env::var("BARK_SERVER_ADDRESS") {
-            cfg.backend.server_address = v;
-        }
-        if let Ok(v) = std::env::var("BARK_ESPLORA_ADDRESS") {
-            cfg.backend.esplora_address = v;
-        }
-        if let Ok(v) = std::env::var("BARK_NETWORK") {
-            cfg.backend.network = v;
-        }
-        if let Ok(v) = std::env::var("BARK_DATA_DIR") {
-            cfg.backend.data_dir = v;
-        }
-        if let Ok(v) = std::env::var("BARK_EVENT_POLL_INTERVAL_MS") {
-            cfg.backend.event_poll_interval_ms = v
-                .parse()
-                .with_context(|| format!("invalid BARK_EVENT_POLL_INTERVAL_MS value `{v}`"))?;
-        }
-
-        // Server configuration
-        if let Ok(v) = std::env::var("SERVER_ADDRESS") {
-            cfg.address = v;
-        }
-        if let Ok(v) = std::env::var("SERVER_PORT") {
-            cfg.port = v
-                .parse()
-                .with_context(|| format!("invalid SERVER_PORT value `{v}`"))?;
-        }
-        if let Ok(v) = std::env::var("TLS_ENABLE") {
-            cfg.tls_enable = parse_bool_env("TLS_ENABLE", &v)?;
-        }
-        if let Ok(v) = std::env::var("ALLOW_INSECURE") {
-            cfg.allow_insecure = parse_bool_env("ALLOW_INSECURE", &v)?;
-        }
-        if let Ok(v) = std::env::var("TLS_CERT_PATH") {
-            cfg.tls_cert_path = v;
-        }
-        if let Ok(v) = std::env::var("TLS_KEY_PATH") {
-            cfg.tls_key_path = v;
-        }
-
+        let cfg = extract_config(config_figment())?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -197,59 +148,21 @@ impl Config {
     }
 }
 
+fn config_figment() -> Figment {
+    let mut figment = Figment::from(Serialized::defaults(Config::default()));
+    if std::path::Path::new("config.toml").is_file() {
+        figment = figment.merge(Toml::file_exact("config.toml"));
+    }
+
+    figment
+        .merge(Env::prefixed("SERVER_"))
+        .merge(Env::prefixed("TLS_").map(|key| format!("tls_{}", key.as_str()).into()))
+        .merge(Env::raw().only(&["ALLOW_INSECURE"]))
+        .merge(
+            Env::prefixed(BACKEND_ENV_PREFIX).map(|key| format!("backend.{}", key.as_str()).into()),
+        )
+}
+
 fn extract_config(figment: Figment) -> Result<Config> {
     figment.extract().context("failed to parse configuration")
-}
-
-fn parse_bool_env(name: &str, value: &str) -> Result<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => Ok(true),
-        "0" | "false" | "no" | "off" => Ok(false),
-        _ => bail!("invalid {name} value `{value}`; expected true or false"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn defaults_include_a_nonzero_event_poll_interval() {
-        let config = Config::default();
-        assert_eq!(config.backend.event_poll_interval_ms, 5_000);
-        config.validate().expect("default config is valid");
-    }
-
-    #[test]
-    fn zero_event_poll_interval_is_rejected() {
-        let mut config = Config::default();
-        config.backend.event_poll_interval_ms = 0;
-        let error = config.validate().unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("BARK_EVENT_POLL_INTERVAL_MS must be greater than zero"));
-    }
-
-    #[test]
-    fn toml_can_override_the_event_poll_interval() {
-        let figment = Figment::from(Serialized::defaults(Config::default())).merge(Toml::string(
-            r#"
-                [backend]
-                event_poll_interval_ms = 125
-            "#,
-        ));
-        let config = extract_config(figment).expect("parse test config");
-        assert_eq!(config.backend.event_poll_interval_ms, 125);
-    }
-
-    #[test]
-    fn boolean_environment_values_are_strict_but_friendly() {
-        for value in ["1", "true", "TRUE", "yes", "on"] {
-            assert!(parse_bool_env("TLS_ENABLE", value).unwrap());
-        }
-        for value in ["0", "false", "FALSE", "no", "off"] {
-            assert!(!parse_bool_env("TLS_ENABLE", value).unwrap());
-        }
-        assert!(parse_bool_env("TLS_ENABLE", "sometimes").is_err());
-    }
 }

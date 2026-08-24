@@ -1,9 +1,11 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use figment::{
-    providers::{Format, Serialized, Toml},
+    providers::{Env, Format, Serialized, Toml},
     Figment,
 };
 use serde::{Deserialize, Serialize};
+
+const BACKEND_ENV_PREFIX: &str = "TEMPLATE_";
 
 /// Backend-specific configuration
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -79,46 +81,7 @@ impl Config {
     /// Load from config.toml (if present) and environment variables.
     /// Environment variables override file values.
     pub fn load() -> Result<Self> {
-        // 1) Start with defaults + config.toml only if it exists
-        let base: Config = Default::default();
-        let mut fig = Figment::from(Serialized::defaults(base));
-        if std::path::Path::new("config.toml").exists() {
-            fig = fig.merge(Toml::file("config.toml"));
-        }
-        let mut cfg = extract_config(fig)?;
-
-        // 2) Overlay environment variables explicitly
-        // Example:
-        if let Ok(v) = std::env::var("TEMPLATE_API_URL") {
-            cfg.backend.api_url = v;
-        }
-        if let Ok(v) = std::env::var("TEMPLATE_API_KEY") {
-            cfg.backend.api_key = v;
-        }
-
-        // Server configuration
-        if let Ok(v) = std::env::var("SERVER_ADDRESS") {
-            cfg.address = v;
-        }
-        if let Ok(v) = std::env::var("SERVER_PORT") {
-            cfg.port = v
-                .parse()
-                .with_context(|| format!("invalid SERVER_PORT value `{v}`"))?;
-        }
-        if let Ok(v) = std::env::var("TLS_ENABLE") {
-            cfg.tls_enable = parse_bool_env("TLS_ENABLE", &v)?;
-        }
-        if let Ok(v) = std::env::var("ALLOW_INSECURE") {
-            cfg.allow_insecure = parse_bool_env("ALLOW_INSECURE", &v)?;
-        }
-        if let Ok(v) = std::env::var("TLS_CERT_PATH") {
-            cfg.tls_cert_path = v;
-        }
-        if let Ok(v) = std::env::var("TLS_KEY_PATH") {
-            cfg.tls_key_path = v;
-        }
-
-        Ok(cfg)
+        extract_config(config_figment())
     }
 
     pub fn from_env() -> Result<Self> {
@@ -126,14 +89,21 @@ impl Config {
     }
 }
 
-fn extract_config(figment: Figment) -> Result<Config> {
-    figment.extract().context("failed to parse configuration")
+fn config_figment() -> Figment {
+    let mut figment = Figment::from(Serialized::defaults(Config::default()));
+    if std::path::Path::new("config.toml").is_file() {
+        figment = figment.merge(Toml::file_exact("config.toml"));
+    }
+
+    figment
+        .merge(Env::prefixed("SERVER_"))
+        .merge(Env::prefixed("TLS_").map(|key| format!("tls_{}", key.as_str()).into()))
+        .merge(Env::raw().only(&["ALLOW_INSECURE"]))
+        .merge(
+            Env::prefixed(BACKEND_ENV_PREFIX).map(|key| format!("backend.{}", key.as_str()).into()),
+        )
 }
 
-fn parse_bool_env(name: &str, value: &str) -> Result<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => Ok(true),
-        "0" | "false" | "no" | "off" => Ok(false),
-        _ => bail!("invalid {name} value `{value}`; expected true or false"),
-    }
+fn extract_config(figment: Figment) -> Result<Config> {
+    figment.extract().context("failed to parse configuration")
 }

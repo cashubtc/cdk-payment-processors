@@ -46,6 +46,9 @@ export TLS_CERT_PATH="certs/server.crt"
 export TLS_KEY_PATH="certs/server.key"
 ```
 
+Boolean environment variables accept only the literal values `true` and
+`false`.
+
 A mnemonic is required, either through `SPARK_MNEMONIC` or the
 `backend.mnemonic` configuration value. Keep it secret: it controls the Spark
 wallet.

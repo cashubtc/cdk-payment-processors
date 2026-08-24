@@ -40,6 +40,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Configuration environment variables are now applied through Figment
+  providers, and boolean environment values accept only `true` or `false`.
 - Updated the CDK integration to `cdk-common` and `cdk-payment-processor`
   `0.17.3`.
 - Updated the Bark dependency stack from `0.3.0` to `0.6.1` and adapted the

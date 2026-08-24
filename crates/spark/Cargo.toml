@@ -25,3 +25,6 @@ hex = "0.4"
 redb = "4.1.0"
 spark-wallet = { git = "https://github.com/breez/spark-sdk", tag = "0.22.0" }
 tokio-stream = "0.1"
+
+[dev-dependencies]
+figment = { version = "0.10", features = ["test"] }

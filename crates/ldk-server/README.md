@@ -28,22 +28,30 @@ port = 50051
 
 ## Configuration
 
-See [config.toml.example](config.toml.example). Every value can also be set via a `CDK_LDK_`-prefixed environment variable (environment wins over the file).
+See [config.toml.example](config.toml.example). A `config.toml` in the current
+directory is optional, and environment variables take precedence over its
+values.
 
-| Key | Description | Default |
-|---|---|---|
-| `address` / `port` | gRPC listen address for the processor | `127.0.0.1:50051` |
-| `tls_enable` | TLS for the processor gRPC server | `false` |
-| `allow_insecure` | Explicitly allow plaintext gRPC | `false` |
-| `backend.address` | LDK Server gRPC address (no scheme) | required |
-| `backend.api_key` | LDK Server HMAC API key (hex) | required |
-| `backend.tls_cert_path` | PEM certificate pinned for the LDK Server connection | required |
-| `backend.fee_reserve_min_sat` | Minimum absolute melt fee reserve | `2` |
-| `backend.fee_reserve_percent` | Relative melt fee reserve (`0.01` = 1%) | `0.01` |
-| `backend.max_payment_scan_pages` | `ListPayments` pages scanned for status lookups | `32` |
+| `config.toml` key | Environment variable | Default |
+| --- | --- | --- |
+| `address` | `SERVER_ADDRESS` | `127.0.0.1` |
+| `port` | `SERVER_PORT` | `50051` |
+| `tls_enable` | `TLS_ENABLE` | `false` |
+| `allow_insecure` | `ALLOW_INSECURE` | `false` |
+| `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
+| `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
+| `backend.address` | `LDK_ADDRESS` | Required |
+| `backend.api_key` | `LDK_API_KEY` | Required |
+| `backend.tls_cert_path` | `LDK_TLS_CERT_PATH` | Required |
+| `backend.fee_reserve_min_sat` | `LDK_FEE_RESERVE_MIN_SAT` | `2` |
+| `backend.fee_reserve_percent` | `LDK_FEE_RESERVE_PERCENT` | `0.01` |
+| `backend.max_payment_scan_pages` | `LDK_MAX_PAYMENT_SCAN_PAGES` | `32` |
+
+Boolean environment variables accept only the literal values `true` and
+`false`.
 
 Without TLS, startup fails unless `allow_insecure = true` (or
-`CDK_LDK_ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits
+`ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits
 cleartext on any bind address so it can be used in containers; startup logs a
 warning with the effective address and a stronger exposure warning for
 non-loopback binds. Configure TLS with `tls_enable = true` and
