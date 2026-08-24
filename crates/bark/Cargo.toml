@@ -24,9 +24,7 @@ async-trait = "0.1"
 cdk-common = { version = "0.17.3", default-features = false, features = ["mint", "grpc"] }
 cdk-payment-processor = { version = "0.17.3", default-features = false }
 figment = { version = "0.10", features = ["env", "toml"] }
-futures-core = "0.3"
 serde = { version = "1", features = ["derive"] }
-thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "process", "sync", "net"] }
 tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
@@ -60,6 +58,3 @@ cdk-sqlite = { version = "0.17.3", default-features = false, features = ["mint",
 name = "regtest"
 path = "tests/regtest.rs"
 required-features = ["regtest-tests"]
-
-[dev-dependencies]
-figment = { version = "0.10", features = ["test"] }

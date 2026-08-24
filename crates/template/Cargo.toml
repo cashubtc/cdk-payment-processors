@@ -14,11 +14,7 @@ cdk-payment-processor = { version = "0.17.3", default-features = false }
 figment = { version = "0.10", features = ["env", "toml"] }
 futures-core = "0.3"
 serde = { version = "1", features = ["derive"] }
-thiserror = "2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal"] }
 tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-
-[dev-dependencies]
-figment = { version = "0.10", features = ["test"] }
