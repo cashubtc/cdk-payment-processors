@@ -181,6 +181,29 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
+### Regtest integration tests
+
+An opt-in regtest suite spins up a local Spark federation (regtest bitcoind
+plus three `spark-so` operators with pre-seeded keyshares) using the upstream
+`spark-itest` fixtures and Docker, then verifies network selection, custom
+operator configuration, backend connectivity, event stream lifecycle, clean
+failure paths when the Spark Service Provider is unreachable, on-chain
+deposit claims, and the processor binary across restarts.
+
+```bash
+just test-regtest
+# or directly:
+cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+```
+
+Prerequisites: Docker (the first run builds the `spark-so` and
+`spark-migrations` images from the pinned spark-sdk revision; they are cached
+in `target/`) and `protoc`. Artifacts are kept under
+`target/spark-regtest/run-<timestamp>/`; set `TEST_DIRECTORY` to change the
+root. Because Lightning swaps require Lightspark's hosted SSP, which cannot
+serve a local federation, payment settlement is covered by the failure-path
+scenarios rather than live swaps.
+
 See `CONTRIBUTING.md` for contribution guidelines.
 
 ## Resources

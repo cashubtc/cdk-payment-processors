@@ -1,4 +1,4 @@
-# CDK Payment Processor Template - Just commands
+# CDK Payment Processor for Spark - Just commands
 
 # List available commands
 default:
@@ -50,11 +50,11 @@ ci: fmt-check lint test
 
 # Build Docker image
 docker-build:
-    docker build -t cdk-payment-processor-template .
+    docker build -t cdk-payment-processor-spark .
 
 # Run Docker container
 docker-run:
-    docker run -p 50051:50051 -e SERVER_ADDRESS=0.0.0.0 -e ALLOW_INSECURE=true cdk-payment-processor-template
+    docker run -p 50051:50051 -e SERVER_ADDRESS=0.0.0.0 -e ALLOW_INSECURE=true cdk-payment-processor-spark
 
 # Clean build artifacts
 clean:
@@ -79,3 +79,7 @@ run-debug:
 # Run with trace logging
 run-trace:
     RUST_LOG=trace cargo run
+
+# Run the opt-in Spark Regtest suite
+test-regtest:
+    CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1

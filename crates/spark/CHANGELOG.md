@@ -15,6 +15,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-operator address, FROST identifier, identity public key, and optional
   CA certificate path, plus a configurable `backend.split_secret_threshold`
 - Custom Spark Service Provider (SSP) override through `backend.ssp`
+- An opt-in regtest suite (`--features regtest-tests`, `just test-regtest`)
+  that spins up a local Spark federation (regtest bitcoind plus three
+  `spark-so` operators with pre-seeded keyshares) through the upstream
+  `spark-itest` fixtures, and verifies network selection, custom operator
+  configuration, backend connectivity, event stream lifecycle, dead-SSP
+  failure paths, on-chain deposit claims, and the processor binary across
+  restarts
+- A `lib.rs` target exposing the `backend`, `database`, and `settings`
+  modules so integration tests can exercise the backend directly. The binary
+  now consumes the library instead of declaring the modules itself.
 - Persistent Spark receive request, send request, and transfer ID mappings
 - Current Spark wallet balance logging after connection
 - Justfile with common development commands
