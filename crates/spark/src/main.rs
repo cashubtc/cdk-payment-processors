@@ -1,14 +1,10 @@
-mod backend;
-mod database;
-mod settings;
-
-use crate::backend::SparkBackend;
-use crate::settings::Config;
 use anyhow::{Context, Result};
 use cdk_common::grpc::create_version_check_interceptor;
 use cdk_payment_processor::{
     CdkPaymentProcessorServer, PaymentProcessorServer as PaymentProcessorService,
 };
+use cdk_payment_processor_spark::backend::SparkBackend;
+use cdk_payment_processor_spark::settings::Config;
 use std::{
     fs,
     net::{IpAddr, SocketAddr},

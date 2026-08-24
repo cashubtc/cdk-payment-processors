@@ -1,0 +1,99 @@
+name: Spark Regtest
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Cargo.lock'
+      - 'crates/spark/**'
+      - '.github/workflows/spark-regtest.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'Cargo.lock'
+      - 'crates/spark/**'
+      - '.github/workflows/spark-regtest.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spark-regtest-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  CARGO_INCREMENTAL: 0
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+
+jobs:
+  regtest:
+    name: Full Spark payment flow
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: crates/spark
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Install protobuf compiler
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache Cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-spark-regtest-${{ hashFiles('Cargo.lock', 'crates/spark/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-spark-regtest-
+
+      # The local federation runs `spark-so` operators built from the pinned
+      # spark-sdk revision. The images are rebuilt only when that revision's
+      # docker inputs change; otherwise a cached tarball is loaded.
+      - name: Cache spark operator images
+        id: cache-images
+        uses: actions/cache@v6
+        with:
+          path: /tmp/spark-images.tar
+          key: spark-images-0.22.0-v1
+
+      - name: Build spark operator images
+        if: steps.cache-images.outputs.cache-hit != 'true'
+        run: |
+          git clone --quiet --depth 1 --branch 0.22.0 \
+            https://github.com/breez/spark-sdk ../../target/spark-sdk-src
+          cd ../../target/spark-sdk-src/crates/spark-itest/docker
+          docker build -t spark-migrations -f migrations.dockerfile .
+          docker build -t spark-so -f spark-so.dockerfile .
+          docker save spark-migrations:latest spark-so:latest -o /tmp/spark-images.tar
+
+      - name: Load cached spark operator images
+        if: steps.cache-images.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/spark-images.tar
+
+      - name: Run Spark Regtest suite
+        timeout-minutes: 75
+        run: CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+
+      - name: Upload daemon logs and databases
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: spark-regtest-${{ github.run_id }}
+          path: target/spark-regtest
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 14

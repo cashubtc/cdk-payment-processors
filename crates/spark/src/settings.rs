@@ -1,11 +1,45 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use figment::{
     providers::{Env, Format, Serialized, Toml},
     Figment,
 };
 use serde::{Deserialize, Serialize};
+use spark_wallet::Network;
 
 const BACKEND_ENV_PREFIX: &str = "SPARK_";
+
+/// A single Spark operator in a custom federation
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct OperatorSettings {
+    /// gRPC address of the Spark operator
+    pub address: String,
+
+    /// FROST identifier of the operator (32-byte hex)
+    pub identifier: String,
+
+    /// Identity public key of the operator (33-byte compressed hex)
+    pub identity_public_key: String,
+
+    /// Path to a PEM CA certificate used to verify the operator's TLS
+    /// connection; required when the operator does not use a publicly
+    /// trusted certificate
+    #[serde(default)]
+    pub ca_cert_path: Option<String>,
+}
+
+/// Custom Spark Service Provider (SSP) used for Lightning swaps
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SspSettings {
+    /// Base URL of the SSP API
+    pub base_url: String,
+
+    /// Identity public key of the SSP (33-byte compressed hex)
+    pub identity_public_key: String,
+
+    /// Optional GraphQL schema endpoint path
+    #[serde(default)]
+    pub schema_endpoint: Option<String>,
+}
 
 /// Backend-specific configuration for Spark wallet
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -13,9 +47,33 @@ pub struct BackendConfig {
     /// BIP39 mnemonic for wallet seed
     pub mnemonic: String,
 
+    /// Spark network to connect to (mainnet, regtest, testnet, signet)
+    #[serde(default = "default_network")]
+    pub network: Network,
+
     /// Data directory for persistent quote and Spark request mappings
     #[serde(default = "default_data_dir")]
     pub data_dir: String,
+
+    /// Custom operator federation. When set, replaces the default operator
+    /// pool; required for networks without public operators such as regtest.
+    /// Operators are indexed by their position in the list (id 0, 1, ...).
+    #[serde(default)]
+    pub operators: Vec<OperatorSettings>,
+
+    /// Number of operators whose key shares are needed to reconstruct the
+    /// wallet secret. Defaults to 2 (or the operator count if fewer).
+    #[serde(default)]
+    pub split_secret_threshold: Option<u32>,
+
+    /// Custom Spark Service Provider (SSP) used for Lightning swaps. When
+    /// unset, the default SSP for the selected network is used.
+    #[serde(default)]
+    pub ssp: Option<SspSettings>,
+}
+
+fn default_network() -> Network {
+    Network::Mainnet
 }
 
 fn default_data_dir() -> String {
@@ -26,8 +84,29 @@ impl Default for BackendConfig {
     fn default() -> Self {
         Self {
             mnemonic: String::new(),
+            network: default_network(),
             data_dir: default_data_dir(),
+            operators: Vec::new(),
+            split_secret_threshold: None,
+            ssp: None,
         }
+    }
+}
+
+impl BackendConfig {
+    /// Resolve the signing threshold against the effective operator count.
+    pub fn resolve_split_secret_threshold(&self, operator_count: usize) -> Result<u32> {
+        let count = u32::try_from(operator_count).context("too many operators")?;
+        let threshold = self.split_secret_threshold.unwrap_or(count.min(2));
+        if threshold == 0 {
+            bail!("split_secret_threshold must be at least 1");
+        }
+        if threshold > count {
+            bail!(
+                "split_secret_threshold ({threshold}) cannot exceed the number of operators ({count})"
+            );
+        }
+        Ok(threshold)
     }
 }
 
