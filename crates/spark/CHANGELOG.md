@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Direct Spark operator and SSP integration through the low-level `spark-wallet` crate
+- Selectable Spark network through `backend.network` / `SPARK_NETWORK`
+  (mainnet, regtest, testnet, signet; defaults to mainnet)
+- Custom operator federation support through `backend.operators` with
+  per-operator address, FROST identifier, identity public key, and optional
+  CA certificate path, plus a configurable `backend.split_secret_threshold`
+- Custom Spark Service Provider (SSP) override through `backend.ssp`
 - Persistent Spark receive request, send request, and transfer ID mappings
 - Current Spark wallet balance logging after connection
 - Justfile with common development commands

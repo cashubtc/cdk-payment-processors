@@ -20,7 +20,7 @@ use cdk_common::{Amount, Bolt11Invoice};
 use futures_core::Stream;
 use spark_wallet::{
     DefaultSigner, InvoiceDescription, LightningReceiveRequestStatus, LightningSendPayment,
-    LightningSendStatus, ListTransfersRequest, Network, PagingFilter, SparkSigner,
+    LightningSendStatus, ListTransfersRequest, OperatorPoolConfig, PagingFilter, SparkSigner,
     SparkSignerAdapter, SparkWallet, SparkWalletConfig, TransferDirection, TransferId,
     TransferStatus, WalletBuilder, WalletEvent, WalletTransfer,
 };
@@ -29,6 +29,8 @@ use tokio_stream::wrappers::ReceiverStream;
 
 use crate::database::QuoteDatabase;
 use crate::settings::BackendConfig;
+
+use anyhow::Context as _;
 
 struct PaymentEventStreamActivity {
     active_streams: Arc<AtomicUsize>,
@@ -114,12 +116,13 @@ impl SparkBackend {
         let mnemonic = Mnemonic::parse(&config.mnemonic)
             .map_err(|e| anyhow::anyhow!("Invalid BIP-39 mnemonic: {e}"))?;
         let seed = mnemonic.to_seed("");
-        let signer = DefaultSigner::new(&seed, Network::Mainnet)
+        let network = config.network;
+        let signer = DefaultSigner::new(&seed, network)
             .map_err(|e| anyhow::anyhow!("Failed to initialize Spark signer: {e}"))?;
         let spark_signer: Arc<dyn SparkSigner> =
             Arc::new(SparkSignerAdapter::new(Arc::new(signer)));
 
-        let mut wallet_config = SparkWalletConfig::default_config(Network::Mainnet);
+        let mut wallet_config = Self::build_wallet_config(&config, network)?;
         wallet_config.leaf_auto_optimize_enabled = true;
         wallet_config.leaf_optimization_options.multiplicity = 5;
         wallet_config.max_concurrent_claims = 5;
@@ -140,6 +143,7 @@ impl SparkBackend {
 
         tracing::info!(
             identity_public_key = %wallet.get_identity_public_key(),
+            network = %network,
             "Connected directly to Spark"
         );
 
@@ -163,6 +167,70 @@ impl SparkBackend {
             db,
             shutdown_sender,
         })
+    }
+
+    /// Build the wallet configuration, applying custom operator federation
+    /// and SSP overrides when configured.
+    fn build_wallet_config(
+        config: &BackendConfig,
+        network: spark_wallet::Network,
+    ) -> anyhow::Result<SparkWalletConfig> {
+        let mut wallet_config = SparkWalletConfig::default_config(network);
+
+        if !config.operators.is_empty() {
+            let mut operators = Vec::with_capacity(config.operators.len());
+            for (index, operator) in config.operators.iter().enumerate() {
+                let ca_cert = match &operator.ca_cert_path {
+                    Some(path) => {
+                        let cert = std::fs::read(path).with_context(|| {
+                            format!("failed to read CA certificate `{path}` for operator {index}")
+                        })?;
+                        Some(cert)
+                    }
+                    None => None,
+                };
+                let operator_config = SparkWalletConfig::create_operator_config(
+                    index,
+                    &operator.identifier,
+                    &operator.address,
+                    ca_cert.as_deref(),
+                    &operator.identity_public_key,
+                )
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Invalid Spark operator {index} (`{}`): {e}",
+                        operator.address
+                    )
+                })?;
+                operators.push(operator_config);
+            }
+
+            wallet_config.operator_pool = OperatorPoolConfig::new(0, operators)
+                .map_err(|e| anyhow::anyhow!("Invalid Spark operator pool: {e}"))?;
+            wallet_config.split_secret_threshold =
+                config.resolve_split_secret_threshold(config.operators.len())?;
+
+            tracing::info!(
+                operators = config.operators.len(),
+                split_secret_threshold = wallet_config.split_secret_threshold,
+                "Using custom Spark operator federation"
+            );
+        } else if config.split_secret_threshold.is_some() {
+            anyhow::bail!("split_secret_threshold requires at least one custom operator");
+        }
+
+        if let Some(ssp) = &config.ssp {
+            wallet_config.service_provider_config =
+                SparkWalletConfig::create_service_provider_config(
+                    &ssp.base_url,
+                    &ssp.identity_public_key,
+                    ssp.schema_endpoint.clone(),
+                )
+                .map_err(|e| anyhow::anyhow!("Invalid Spark service provider (SSP) config: {e}"))?;
+            tracing::info!(base_url = %ssp.base_url, "Using custom Spark service provider");
+        }
+
+        Ok(wallet_config)
     }
 
     /// Stop Spark background processing.
