@@ -64,6 +64,35 @@ After binding, the processor calls its own `GetSettings` from the local host
 non-zero** if it does not answer. This fails fast on port conflicts instead of
 looking healthy while another service owns the port.
 
+## Regtest integration tests
+
+The crate ships an opt-in regtest suite that runs the backend and the real
+processor binary against two live `ldk-server` daemons (a payer node funding a
+channel to the mint-side node) on a regtest `bitcoind`. It covers BOLT11 and
+BOLT12 receive/send, quote fee math, held-HTLC pending/failed semantics,
+invoice expiry, processor restarts, event streaming, and a full Cashu
+mint/melt round trip.
+
+```bash
+just test-regtest
+# or directly:
+cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+```
+
+Prerequisites: `git`, `protoc` (required by the `cdk-signatory` build),
+network access, and `bitcoind`. If `BITCOIND_EXE` is unset, bitcoind is
+downloaded automatically at build time via `corepc-node`.
+The `ldk-server` daemon itself is resolved as follows:
+
+- Set `LDK_SERVER_EXE=/path/to/ldk-server` to use an existing binary.
+- Otherwise the upstream repository is cloned into
+  `target/ldk-server-src` at the same revision pinned in `Cargo.toml` and
+  built once into `target/ldk-server-build/debug/ldk-server`.
+
+Artifacts (daemon logs, configs, mint database) are kept under
+`target/ldk-server-regtest/run-<timestamp>/`; set `TEST_DIRECTORY` to change
+the root.
+
 ## Notes
 
 - Depends on `ldk-server-client` via a git rev; this crate is a binary and is not published to crates.io.

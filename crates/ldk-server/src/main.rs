@@ -1,7 +1,3 @@
-mod backend;
-mod error;
-mod settings;
-
 use std::fs;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -16,12 +12,11 @@ use cdk_payment_processor::{
     CdkPaymentProcessorServer, PaymentProcessorClient,
     PaymentProcessorServer as PaymentProcessorService,
 };
+use cdk_payment_processor_ldk_server::backend::{Config as BackendConfig, LdkServerBackend};
+use cdk_payment_processor_ldk_server::settings::Config;
 use tokio::signal;
 use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tracing_subscriber::EnvFilter;
-
-use crate::backend::{Config as BackendConfig, LdkServerBackend};
-use crate::settings::Config;
 
 const INSECURE_GUIDANCE: &str = "configure TLS with tls_enable = true and \
     tls_cert_path/tls_key_path, or set allow_insecure = true to accept cleartext traffic";
