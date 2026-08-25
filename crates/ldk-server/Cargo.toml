@@ -31,6 +31,8 @@ tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
+# ldk-server deps
+
 bitcoin = { version = "0.32.2", features = ["base64", "serde", "rand", "rand-std"] }
 ldk-server-client = { git = "https://github.com/lightningdevkit/ldk-server", rev = "50fe7523be3529d86bfee0dfc35df9a52aca7310", default-features = false }
 lightning = { version = "0.2.0", default-features = false, features = ["std"] }

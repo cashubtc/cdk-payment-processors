@@ -28,6 +28,8 @@ tonic = { version = "0.14", features = ["transport", "tls-ring"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
+# spark deps
+
 bip39 = "2.2"
 hex = "0.4"
 redb = "4.1.0"
@@ -35,6 +37,7 @@ spark-wallet = { git = "https://github.com/breez/spark-sdk", tag = "0.22.0" }
 tokio-stream = "0.1"
 
 # spark regtest tests
+
 bitcoin = { version = "0.32", optional = true }
 futures = { version = "0.3", optional = true }
 lightning-invoice = { version = "0.34", optional = true }
