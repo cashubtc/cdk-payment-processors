@@ -4,8 +4,7 @@ A standalone gRPC payment processor that lets a CDK mint use a Bark wallet for
 Lightning and on-chain Bitcoin payments through Ark.
 
 The service implements CDK's `MintPayment` interface using `bark-wallet` and
-runs it with `cdk-payment-processor`. It is currently built against CDK
-`0.17.3` and Bark `0.6.1`.
+runs it with `cdk-payment-processor`.
 
 ## Supported payments
 
@@ -179,8 +178,8 @@ Run it from this directory with Nix:
 just regtest
 ```
 
-The integration shell and the Cargo test harness are pinned to Bark commit
-`bark-0.6.1`, matching Bark `0.6.1`. Linux runs Core Lightning directly;
+The Cargo test harness is pinned to Bark tag `bark-X.Y.Z`, matching the Bark
+`X.Y.Z` dependencies in `Cargo.toml`. Linux runs Core Lightning directly;
 on macOS, Bark's upstream harness uses Docker, so a Docker daemon must be
 running. To use an already prepared environment, run `just test-regtest`.
 The integration shell supplies only the pinned service binaries, required

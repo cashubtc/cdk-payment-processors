@@ -146,16 +146,16 @@ Add your backend's required dependencies to `Cargo.toml`:
 ```toml
 [dependencies]
 # For HTTP APIs
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.13", features = ["json"] }
 
 # For GraphQL (e.g., Blink)
-graphql_client = "0.13"
+graphql_client = "0.16"
 
 # For gRPC backends (e.g., LND)
-tonic = "0.10"
+tonic = "0.14"
 
 # For WebSockets
-tokio-tungstenite = "0.21"
+tokio-tungstenite = "0.30"
 
 # Add what you need!
 ```

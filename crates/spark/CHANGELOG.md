@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Raised the minimum supported Rust version to 1.88
 - BOLT11 settings now report multi-part payments as unsupported
 - Renamed `server_addr` and `server_port` to `address` and `port`, and `SERVER_ADDR` to `SERVER_ADDRESS`
-- Replaced `breez-sdk-spark` 0.12.1 with `spark-wallet` from Breez Spark SDK 0.22.0
+- Replaced `breez-sdk-spark` 0.12.1 with `spark-wallet` from Breez Spark SDK 0.23.0
 - Outgoing payment recovery now queries persisted Spark transfer IDs directly before using the legacy invoice-history fallback
 - Renamed the wallet mnemonic environment variable from `BREEZ_MNEMONIC` to `SPARK_MNEMONIC`
 - Replaced `working_dir` and `WORKING_DIR` with the Bark-style `data_dir` setting and `SPARK_DATA_DIR` environment variable

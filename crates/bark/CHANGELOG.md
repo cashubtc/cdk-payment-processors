@@ -46,7 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   providers, and boolean environment values accept only `true` or `false`.
 - Updated the CDK integration to `cdk-common` and `cdk-payment-processor`
   `0.17.3`.
-- Updated the Bark dependency stack from `0.3.0` to `0.6.1` and adapted the
+- Updated the Bark dependency stack from `0.3.0` to `0.6.2` and adapted the
   backend to Bark's shared on-chain wallet and settled Lightning receive APIs.
 - On-chain receives now board only the detected deposit UTXO by building and
   signing its funding transaction locally before passing it to
@@ -65,8 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `config.toml.example`; local `config.toml` files are ignored.
 - Rewrote the README around the implemented Bark processor and removed the
   generic payment processor template guide.
-- Pinned the Regtest Cargo harness and Nix service environment to the exact
-  upstream Bark commit corresponding to the tested `0.6.1` implementation.
+- Pinned the Regtest Cargo harness to the tested Bark `0.6.2` implementation
+  and added a Nix service environment for the integration binaries.
 - Kept the Regtest Nix shell runtime-only: it supplies the pinned service
   binaries while reusing the caller's Rust toolchain.
 
