@@ -1293,7 +1293,7 @@ impl BarkBackend {
     }
 
     // Board a single confirmed deposit UTXO by building and signing the funding
-    // transaction locally, then handing it to Bark via `board_tx`. This keeps
+    // transaction locally, then handing it to Bark via `board_psbt`. This keeps
     // per-quote accounting exact: only the selected outpoint is spent.
     async fn board_deposit(
         &self,
@@ -1312,7 +1312,7 @@ impl BarkBackend {
         };
 
         self.wallet
-            .board_tx(signed_psbt, user_keypair, expiry_height)
+            .board_psbt(signed_psbt, user_keypair, expiry_height)
             .await
     }
 

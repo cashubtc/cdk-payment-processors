@@ -1765,8 +1765,14 @@ async fn bark_regtest_suite() -> Result<()> {
             cfg.invoice_check_interval = POLL_INTERVAL;
             cfg.invoice_poll_interval = POLL_INTERVAL;
             cfg.invoice_expiry = Duration::from_secs(10);
-            cfg.vtxopool.issue_interval = POLL_INTERVAL;
             cfg.fees.lightning_send.base_fee = sat(5);
+            // This suite performs several Lightning receives without a chain
+            // tip change. Keep enough entries of each configured size that
+            // pool change reaching its exit-depth limit cannot starve later
+            // black-box and Cashu receive scenarios.
+            for target in &mut cfg.vtxopool.vtxo_targets {
+                target.count = target.count.max(8);
+            }
         })
         .await;
     let server_address = server.new_onchain_address().await?;

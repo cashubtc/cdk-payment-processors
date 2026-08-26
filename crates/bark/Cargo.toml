@@ -32,9 +32,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 
 # bark deps
 
-ark-lib = "0.6.1"
-bark-bitcoin-ext = "0.6.1"
-bark-wallet = { version = "0.6.1", features = ["onchain-bdk"] }
+ark-lib = "0.6.2"
+bark-bitcoin-ext = "0.6.2"
+bark-wallet = { version = "0.6.2", features = ["onchain-bdk"] }
 bip39 = "2.2"
 bitcoin = "0.32"
 futures = "0.3"
@@ -46,9 +46,9 @@ uuid = { version = "1.0", features = ["v4"] }
 
 # bark regtest tests
 
-ark-testing = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.1", optional = true }
+ark-testing = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.2", optional = true }
 axum = { version = "0.8", optional = true }
-bark-cln-rpc = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.1", optional = true }
+bark-cln-rpc = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.2", optional = true }
 bitcoincore-rpc = { version = "0.19", optional = true }
 cdk = { version = "0.17.3", default-features = false, features = ["mint", "wallet"], optional = true }
 cdk-axum = { version = "0.17.3", optional = true }

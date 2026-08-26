@@ -48,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   backend to Bark's shared on-chain wallet and settled Lightning receive APIs.
 - On-chain receives now board only the detected deposit UTXO by building and
   signing its funding transaction locally before passing it to
-  `Wallet::board_tx`.
+  `Wallet::board_psbt`.
 - Payment event polling now rotates across Lightning and on-chain receives and
   sends (including arkoor), with bounded scans and persisted cursors for large
   state histories. Its interval is configurable with
@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Regtest suite now provisions enough VTXO-pool entries for its complete
+  set of Lightning receive scenarios, preventing the later Cashu flow from
+  exhausting Bark's default pool.
 - The payment processor now fails closed without TLS unless plaintext is
   explicitly enabled with `allow_insecure`, warning more strongly when the
   effective bind address is not loopback.
