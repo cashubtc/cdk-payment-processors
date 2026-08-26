@@ -1765,7 +1765,6 @@ async fn bark_regtest_suite() -> Result<()> {
             cfg.invoice_check_interval = POLL_INTERVAL;
             cfg.invoice_poll_interval = POLL_INTERVAL;
             cfg.invoice_expiry = Duration::from_secs(10);
-            cfg.vtxopool.issue_interval = POLL_INTERVAL;
             cfg.fees.lightning_send.base_fee = sat(5);
         })
         .await;
