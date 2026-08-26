@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A crate-local `Cargo.lock` and locked development commands for reproducible
+  standalone builds.
 - A Bark-backed implementation of CDK's `MintPayment` interface, served through
   the CDK payment processor gRPC server.
 - Fixed-amount BOLT11 invoice creation, outgoing payment quotes and payments,

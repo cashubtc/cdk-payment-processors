@@ -10,4 +10,4 @@ test:
 
 # Run the opt-in LDK Server Regtest suite
 test-regtest:
-    CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+    CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --locked --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1

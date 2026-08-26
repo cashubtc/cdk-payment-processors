@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- A crate-local `Cargo.lock` for reproducible standalone builds.
+- A crate-local `Cargo.lock` and locked development commands for reproducible
+  standalone builds.
 - An opt-in regtest integration suite (`--features regtest-tests`,
   `just test-regtest`) that runs the backend and the processor binary against
   two real `ldk-server` daemons on a regtest `bitcoind`, covering BOLT11 and

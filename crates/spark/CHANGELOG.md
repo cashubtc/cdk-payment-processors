@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A crate-local `Cargo.lock` and locked development commands for reproducible
+  standalone builds.
 - Direct Spark operator and SSP integration through the low-level `spark-wallet` crate
 - Selectable Spark network through `backend.network` / `SPARK_NETWORK`
   (mainnet, regtest, testnet, signet; defaults to mainnet)

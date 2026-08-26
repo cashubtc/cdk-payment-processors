@@ -5,13 +5,11 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'Cargo.lock'
       - 'crates/bark/**'
       - '.github/workflows/bark-regtest.yml'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'Cargo.lock'
       - 'crates/bark/**'
       - '.github/workflows/bark-regtest.yml'
 
@@ -56,7 +54,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-bark-regtest-${{ hashFiles('Cargo.lock', 'crates/bark/Cargo.toml', 'crates/bark/flake.lock') }}
+          key: ${{ runner.os }}-bark-regtest-${{ hashFiles('crates/bark/Cargo.lock', 'crates/bark/Cargo.toml', 'crates/bark/flake.lock') }}
           restore-keys: |
             ${{ runner.os }}-bark-regtest-
 

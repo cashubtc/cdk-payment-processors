@@ -192,8 +192,6 @@ deposit claims, and the processor binary across restarts.
 
 ```bash
 just test-regtest
-# or directly:
-cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
 ```
 
 Prerequisites: Docker (the first run builds the `spark-so` and
