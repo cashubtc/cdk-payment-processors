@@ -81,8 +81,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.crate }}-cargo-${{ hashFiles('Cargo.lock', 'Cargo.toml', format('crates/{0}/Cargo.toml', matrix.crate)) }}
+            crates/${{ matrix.crate }}/target
+          key: ${{ runner.os }}-${{ matrix.crate }}-cargo-${{ hashFiles(format('crates/{0}/Cargo.lock', matrix.crate), format('crates/{0}/Cargo.toml', matrix.crate)) }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.crate }}-cargo-
 
@@ -90,13 +90,13 @@ jobs:
         run: cargo fmt -- --check
 
       - name: Run cargo check
-        run: cargo check --all-features
+        run: cargo check --locked --all-features
 
       - name: Run tests
-        run: cargo test --all-features
+        run: cargo test --locked --all-features
 
       - name: Run Clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo clippy --locked --all-features -- -D warnings
 
       - name: Build release
-        run: cargo build --release --all-features
+        run: cargo build --locked --release --all-features

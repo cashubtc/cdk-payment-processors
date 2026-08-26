@@ -75,8 +75,6 @@ mint/melt round trip.
 
 ```bash
 just test-regtest
-# or directly:
-cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
 ```
 
 Prerequisites: `git`, `protoc` (required by the `cdk-signatory` build),

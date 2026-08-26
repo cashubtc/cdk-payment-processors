@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A crate-local `Cargo.lock` for reproducible standalone builds.
 - Justfile with common development commands
 - GitHub Actions CI/CD workflow
 - Graceful shutdown handling (SIGTERM/SIGINT)

@@ -1,12 +1,11 @@
 # CDK Payment Processors
 
-A Cargo workspace containing payment processors that implement
-CDK Payment Processors (`MintPayment` interface over gRPC).
+A collection of self-contained Cargo projects implementing CDK Payment
+Processors (`MintPayment` interface over gRPC).
 
 ## Project structure
 
 ```text
-Cargo.toml       # Workspace manifest
 crates/
 ├── bark/        # Payment processor backed by a Bark wallet
 ├── ldk-server/  # Payment processor backed by an LDK Server node
@@ -14,8 +13,9 @@ crates/
 └── template/    # Starting point for integrating a new payment backend
 ```
 
-Each processor has its own `Cargo.toml`, configuration example, and
-documentation:
+Each processor has its own `Cargo.toml`, `Cargo.lock`, configuration example,
+and documentation. The crates intentionally do not share a Cargo workspace,
+so dependency resolution and reproducible builds are independent:
 
 - [Bark](crates/bark/README.md)
 - [LDK Server](crates/ldk-server/README.md)
@@ -25,8 +25,10 @@ documentation:
 Check or test every crate from the repository root:
 
 ```bash
-cargo check --workspace
-cargo test --workspace
+for manifest in crates/*/Cargo.toml; do
+  cargo check --locked --manifest-path "$manifest"
+  cargo test --locked --manifest-path "$manifest"
+done
 ```
 
 Run an individual processor from its directory:

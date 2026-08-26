@@ -5,13 +5,11 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'Cargo.lock'
       - 'crates/spark/**'
       - '.github/workflows/spark-regtest.yml'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'Cargo.lock'
       - 'crates/spark/**'
       - '.github/workflows/spark-regtest.yml'
 
@@ -56,7 +54,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-spark-regtest-${{ hashFiles('Cargo.lock', 'crates/spark/Cargo.toml') }}
+          key: ${{ runner.os }}-spark-regtest-${{ hashFiles('crates/spark/Cargo.lock', 'crates/spark/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-spark-regtest-
 
@@ -86,7 +84,7 @@ jobs:
 
       - name: Run Spark Regtest suite
         timeout-minutes: 75
-        run: CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+        run: CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --locked --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
 
       - name: Upload daemon logs and databases
         if: always()

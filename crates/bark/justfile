@@ -34,7 +34,7 @@ test-verbose:
 
 # Run the opt-in Bark Regtest suite from an already prepared integration shell
 test-regtest:
-    CHAIN_SOURCE=esplora KEEP_ALL_TEST_DATA=1 CARGO_INCREMENTAL=0 TEST_LOG=info RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+    CHAIN_SOURCE=esplora KEEP_ALL_TEST_DATA=1 CARGO_INCREMENTAL=0 TEST_LOG=info RUST_LOG=info cargo test --locked --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
 
 # Enter the pinned Bark integration shell and run the full suite
 regtest:

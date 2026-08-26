@@ -5,13 +5,11 @@ on:
   push:
     branches: [main, develop]
     paths:
-      - 'Cargo.lock'
       - 'crates/ldk-server/**'
       - '.github/workflows/ldk-server-regtest.yml'
   pull_request:
     branches: [main, develop]
     paths:
-      - 'Cargo.lock'
       - 'crates/ldk-server/**'
       - '.github/workflows/ldk-server-regtest.yml'
 
@@ -56,7 +54,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: ${{ runner.os }}-ldk-server-regtest-${{ hashFiles('Cargo.lock', 'crates/ldk-server/Cargo.toml') }}
+          key: ${{ runner.os }}-ldk-server-regtest-${{ hashFiles('crates/ldk-server/Cargo.lock', 'crates/ldk-server/Cargo.toml') }}
           restore-keys: |
             ${{ runner.os }}-ldk-server-regtest-
 
@@ -82,7 +80,7 @@ jobs:
 
       - name: Run LDK Server Regtest suite
         timeout-minutes: 75
-        run: CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+        run: CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --locked --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
 
       - name: Upload daemon logs and databases
         if: always()
