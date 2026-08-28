@@ -57,6 +57,7 @@ cp config.toml.example config.toml
 | `backend.network` | `BARK_NETWORK` | `mainnet` |
 | `backend.data_dir` | `BARK_DATA_DIR` | `.data/bark` |
 | `backend.event_poll_interval_ms` | `BARK_EVENT_POLL_INTERVAL_MS` | `5000` |
+| `backend.payment_methods` | `BARK_PAYMENT_METHODS` | all supported |
 | `address` | `SERVER_ADDRESS` | `127.0.0.1` |
 | `port` | `SERVER_PORT` | `50051` |
 | `tls_enable` | `TLS_ENABLE` | `false` |
@@ -74,6 +75,35 @@ Esplora endpoint, and network must refer to the same network.
 
 The mnemonic controls the processor's funds. Never use the mnemonic from
 `config.toml.example`, commit a real mnemonic, or expose it in logs.
+
+### Advertised payment methods
+
+A CDK mint selects its backend per `(unit, method)` pair, and registers a
+backend for every method that backend advertises in its settings. By default
+this processor advertises `bolt11`, `onchain`, and the custom `arkoor` method,
+so a mint backed only by bark serves all three without extra configuration.
+
+That default makes bark the only backend a mint can have, because a second
+backend offering `bolt11` would collide on the same `(unit, method)` pair and
+the mint rejects the duplicate. Set `backend.payment_methods` to advertise a
+subset instead, which frees the remaining rails for another backend:
+
+```toml
+[backend]
+# Core Lightning keeps bolt11; this processor serves on-chain deposits only.
+payment_methods = ["onchain"]
+```
+
+The environment form takes a comma-separated list:
+
+```bash
+BARK_PAYMENT_METHODS=onchain
+```
+
+Supported values are `bolt11`, `onchain`, and `arkoor`. Names are
+case-insensitive and surrounding whitespace is ignored. An unrecognised name
+fails at startup rather than being skipped, so a typo cannot silently drop a
+rail. Leaving the setting unset, empty, or absent advertises everything.
 
 ### Persistent state
 

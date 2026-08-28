@@ -28,7 +28,7 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
-use crate::settings::BackendConfig;
+use crate::settings::{AdvertisedMethod, BackendConfig};
 
 const ONCHAIN_CONFIRMATIONS: u32 = 1;
 const ONCHAIN_FEE_INDEX: u32 = 0;
@@ -47,6 +47,9 @@ pub struct BarkBackend {
     network: bitcoin::Network,
     event_poll_interval: Duration,
     wait_invoice_active: Arc<AtomicBool>,
+    /// Rails this backend reports in `get_settings`, and therefore the only
+    /// ones a mint will register it for.
+    advertised_methods: Vec<AdvertisedMethod>,
 }
 
 const RECEIVE_ADDRESSES_TABLE: TableDefinition<&str, &str> =
@@ -91,6 +94,46 @@ const MAX_RECEIVE_INTENTS_SCANNED_PER_TICK: usize = 64;
 const MAX_SEND_INTENTS_SCANNED_PER_TICK: usize = 64;
 const MAX_RECEIVE_QUOTES_SCANNED_PER_TICK: usize = 64;
 const ARKOOR_PAYMENT_METHOD: &str = "arkoor";
+
+/// Build the settings a mint reads to decide which rails to register this
+/// backend for.
+///
+/// A mint registers a backend per `(unit, method)` pair and claims every method
+/// the backend advertises here, so restricting `methods` is what allows bark to
+/// sit alongside another backend instead of competing with it.
+fn settings_response(methods: &[AdvertisedMethod]) -> SettingsResponse {
+    let advertises = |method: AdvertisedMethod| methods.contains(&method);
+
+    let custom = if advertises(AdvertisedMethod::Arkoor) {
+        HashMap::from([(
+            ARKOOR_PAYMENT_METHOD.to_string(),
+            serde_json::json!({
+                "request": "ark_address",
+                "extra": {"amount_sat": "positive_integer"},
+                "fee": "zero"
+            })
+            .to_string(),
+        )])
+    } else {
+        HashMap::new()
+    };
+
+    SettingsResponse {
+        unit: "sat".to_string(),
+        bolt11: advertises(AdvertisedMethod::Bolt11).then_some(Bolt11Settings {
+            mpp: false,
+            amountless: false,
+            invoice_description: true,
+        }),
+        bolt12: None,
+        onchain: advertises(AdvertisedMethod::Onchain).then_some(OnchainSettings {
+            confirmations: ONCHAIN_CONFIRMATIONS,
+            min_receive_amount_sat: 1,
+            min_send_amount_sat: 1,
+        }),
+        custom,
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OnchainReceiveIntentRecord {
@@ -881,6 +924,16 @@ impl BarkBackend {
             anyhow::bail!("BARK_EVENT_POLL_INTERVAL_MS must be greater than zero");
         }
 
+        let advertised_methods = config.advertised_methods()?;
+        info!(
+            "Advertising payment methods: {}",
+            advertised_methods
+                .iter()
+                .map(|method| method.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
         // Parse the mnemonic
         let mnemonic = config
             .mnemonic
@@ -960,6 +1013,7 @@ impl BarkBackend {
             network,
             event_poll_interval: Duration::from_millis(config.event_poll_interval_ms),
             wait_invoice_active: Arc::new(AtomicBool::new(false)),
+            advertised_methods,
         })
     }
 
@@ -2413,30 +2467,7 @@ impl MintPayment for BarkBackend {
 
     async fn get_settings(&self) -> Result<SettingsResponse, Self::Err> {
         debug!("Getting Bark wallet settings");
-        let custom = HashMap::from([(
-            ARKOOR_PAYMENT_METHOD.to_string(),
-            serde_json::json!({
-                "request": "ark_address",
-                "extra": {"amount_sat": "positive_integer"},
-                "fee": "zero"
-            })
-            .to_string(),
-        )]);
-        Ok(SettingsResponse {
-            unit: "sat".to_string(),
-            bolt11: Some(Bolt11Settings {
-                mpp: false,
-                amountless: false,
-                invoice_description: true,
-            }),
-            bolt12: None,
-            onchain: Some(OnchainSettings {
-                confirmations: ONCHAIN_CONFIRMATIONS,
-                min_receive_amount_sat: 1,
-                min_send_amount_sat: 1,
-            }),
-            custom,
-        })
+        Ok(settings_response(&self.advertised_methods))
     }
 
     async fn create_incoming_payment_request(
@@ -3201,6 +3232,77 @@ impl MintPayment for BarkBackend {
 
 #[cfg(test)]
 mod tests {
+    use super::{settings_response, AdvertisedMethod, ARKOOR_PAYMENT_METHOD};
+
+    #[test]
+    fn every_method_is_advertised_by_default() {
+        let settings = settings_response(&AdvertisedMethod::ALL);
+        assert!(settings.bolt11.is_some());
+        assert!(settings.onchain.is_some());
+        assert!(settings.custom.contains_key(ARKOOR_PAYMENT_METHOD));
+        // bolt12 has never been served by this backend.
+        assert!(settings.bolt12.is_none());
+    }
+
+    #[test]
+    fn onchain_only_hides_lightning_and_arkoor() {
+        // The shape that lets a Core Lightning node keep bolt11: bark must not
+        // claim a rail it was not configured for, or the mint rejects the
+        // duplicate (unit, method) pair and refuses to start.
+        let settings = settings_response(&[AdvertisedMethod::Onchain]);
+        assert!(settings.onchain.is_some());
+        assert!(settings.bolt11.is_none());
+        assert!(settings.custom.is_empty());
+    }
+
+    #[test]
+    fn bolt11_only_hides_onchain_and_arkoor() {
+        let settings = settings_response(&[AdvertisedMethod::Bolt11]);
+        assert!(settings.bolt11.is_some());
+        assert!(settings.onchain.is_none());
+        assert!(settings.custom.is_empty());
+    }
+
+    #[test]
+    fn arkoor_only_advertises_just_the_custom_method() {
+        let settings = settings_response(&[AdvertisedMethod::Arkoor]);
+        assert!(settings.bolt11.is_none());
+        assert!(settings.onchain.is_none());
+        assert_eq!(settings.custom.len(), 1);
+        assert!(settings.custom.contains_key(ARKOOR_PAYMENT_METHOD));
+    }
+
+    #[test]
+    fn advertising_nothing_yields_no_registrable_method() {
+        // Not reachable through configuration -- an empty list means "all" --
+        // but the builder itself must stay honest.
+        let settings = settings_response(&[]);
+        assert!(settings.bolt11.is_none());
+        assert!(settings.onchain.is_none());
+        assert!(settings.custom.is_empty());
+    }
+
+    #[test]
+    fn advertised_settings_keep_their_values() {
+        // Restricting the set must not quietly change the terms of a rail that
+        // is still advertised.
+        let all = settings_response(&AdvertisedMethod::ALL);
+        let onchain_only = settings_response(&[AdvertisedMethod::Onchain]);
+        assert_eq!(all.unit, onchain_only.unit);
+        assert_eq!(
+            all.onchain.map(|s| (
+                s.confirmations,
+                s.min_receive_amount_sat,
+                s.min_send_amount_sat
+            )),
+            onchain_only.onchain.map(|s| (
+                s.confirmations,
+                s.min_receive_amount_sat,
+                s.min_send_amount_sat
+            )),
+        );
+    }
+
     use super::*;
 
     static NEXT_TEST_STORE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

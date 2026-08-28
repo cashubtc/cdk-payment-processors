@@ -85,6 +85,8 @@ fn backend_config(
         network: "regtest".to_string(),
         data_dir: datadir.as_ref().to_string_lossy().into_owned(),
         event_poll_interval_ms: POLL_INTERVAL.as_millis() as u64,
+        // Advertise every rail, matching the default an operator gets.
+        payment_methods: Vec::new(),
     }
 }
 

@@ -27,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   delivery.
 - Configuration through an optional `config.toml` file and `BARK_*` and
   `SERVER_*` environment variables.
+- `backend.payment_methods` (`BARK_PAYMENT_METHODS`) to restrict which payment
+  methods the processor advertises, so it can run alongside another payment
+  backend instead of claiming every rail. Defaults to advertising everything.
 - Graceful shutdown on `SIGINT` and `SIGTERM`.
 - Bark wallet balance logging during startup.
 - Development tooling through a Nix flake, GitHub Actions, and a `justfile`.
