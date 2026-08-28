@@ -32,6 +32,7 @@ use tokio::sync::{Mutex, Notify};
 use tokio_util::sync::CancellationToken;
 
 use crate::error::Error;
+use crate::settings::AdvertisedMethod;
 
 const DEFAULT_INVOICE_EXPIRY_SECS: u32 = 36_000;
 const DEFAULT_PAYMENT_WAIT_SECS: u64 = 10;
@@ -116,6 +117,9 @@ pub struct Config {
     pub fee_reserve: FeeReserve,
     /// Maximum `ListPayments` pages to scan for incoming status lookups.
     pub max_payment_scan_pages: u16,
+    /// Rails this backend reports in `get_settings`, and therefore the only ones
+    /// a mint will register it for.
+    pub advertised_methods: Vec<AdvertisedMethod>,
 }
 
 impl std::fmt::Debug for Config {
@@ -145,7 +149,14 @@ impl Config {
             cert_pem,
             fee_reserve,
             max_payment_scan_pages: DEFAULT_MAX_PAYMENT_SCAN_PAGES,
+            advertised_methods: AdvertisedMethod::ALL.to_vec(),
         }
+    }
+
+    /// Restrict the methods this backend advertises to the mint.
+    pub fn with_advertised_methods(mut self, methods: Vec<AdvertisedMethod>) -> Self {
+        self.advertised_methods = methods;
+        self
     }
 
     /// Set the maximum number of payment-history pages scanned for incoming payment status.
@@ -164,6 +175,7 @@ pub struct LdkServerBackend {
     wait_invoice_is_active: Arc<AtomicBool>,
     outgoing_payment_correlations: OutgoingPaymentCorrelations,
     max_payment_scan_pages: u16,
+    advertised_methods: Vec<AdvertisedMethod>,
 }
 
 impl std::fmt::Debug for LdkServerBackend {
@@ -172,6 +184,31 @@ impl std::fmt::Debug for LdkServerBackend {
             .field("fee_reserve", &self.fee_reserve)
             .field("max_payment_scan_pages", &self.max_payment_scan_pages)
             .finish_non_exhaustive()
+    }
+}
+
+/// Build the settings a mint reads to decide which rails to register this
+/// backend for.
+///
+/// A mint registers a backend per `(unit, method)` pair and claims every method
+/// the backend advertises here, so restricting `methods` is what allows this
+/// processor to sit alongside another one instead of competing with it.
+fn settings_response(methods: &[AdvertisedMethod]) -> SettingsResponse {
+    let advertises = |method: AdvertisedMethod| methods.contains(&method);
+
+    SettingsResponse {
+        unit: CurrencyUnit::Msat.to_string(),
+        bolt11: advertises(AdvertisedMethod::Bolt11).then_some(payment::Bolt11Settings {
+            mpp: false,
+            amountless: true,
+            invoice_description: true,
+        }),
+        bolt12: advertises(AdvertisedMethod::Bolt12).then_some(payment::Bolt12Settings {
+            amountless: true,
+            invoice_description: true,
+        }),
+        onchain: None,
+        custom: std::collections::HashMap::new(),
     }
 }
 
@@ -193,6 +230,7 @@ impl LdkServerBackend {
             wait_invoice_is_active: Arc::new(AtomicBool::new(false)),
             outgoing_payment_correlations: OutgoingPaymentCorrelator::new(),
             max_payment_scan_pages: config.max_payment_scan_pages,
+            advertised_methods: config.advertised_methods,
         })
     }
 
@@ -381,20 +419,7 @@ impl MintPayment for LdkServerBackend {
     }
 
     async fn get_settings(&self) -> Result<SettingsResponse, Self::Err> {
-        Ok(SettingsResponse {
-            unit: CurrencyUnit::Msat.to_string(),
-            bolt11: Some(payment::Bolt11Settings {
-                mpp: false,
-                amountless: true,
-                invoice_description: true,
-            }),
-            bolt12: Some(payment::Bolt12Settings {
-                amountless: true,
-                invoice_description: true,
-            }),
-            onchain: None,
-            custom: std::collections::HashMap::new(),
-        })
+        Ok(settings_response(&self.advertised_methods))
     }
 
     async fn create_incoming_payment_request(
@@ -1336,6 +1361,54 @@ async fn sleep_or_cancel(cancel_token: &CancellationToken, duration: Duration) -
 
 #[cfg(test)]
 mod tests {
+    use super::settings_response;
+    use crate::settings::AdvertisedMethod;
+
+    #[test]
+    fn every_method_is_advertised_by_default() {
+        let settings = settings_response(&AdvertisedMethod::ALL);
+        assert!(settings.bolt11.is_some());
+        assert!(settings.bolt12.is_some());
+        // This backend has never served on-chain.
+        assert!(settings.onchain.is_none());
+    }
+
+    #[test]
+    fn bolt12_only_leaves_bolt11_free() {
+        // The shape that lets another backend take bolt11 without colliding.
+        let settings = settings_response(&[AdvertisedMethod::Bolt12]);
+        assert!(settings.bolt12.is_some());
+        assert!(settings.bolt11.is_none());
+    }
+
+    #[test]
+    fn bolt11_only_leaves_bolt12_free() {
+        let settings = settings_response(&[AdvertisedMethod::Bolt11]);
+        assert!(settings.bolt11.is_some());
+        assert!(settings.bolt12.is_none());
+    }
+
+    #[test]
+    fn advertising_nothing_yields_no_registrable_method() {
+        let settings = settings_response(&[]);
+        assert!(settings.bolt11.is_none());
+        assert!(settings.bolt12.is_none());
+    }
+
+    #[test]
+    fn advertised_settings_keep_their_values() {
+        let all = settings_response(&AdvertisedMethod::ALL);
+        let bolt11_only = settings_response(&[AdvertisedMethod::Bolt11]);
+        assert_eq!(all.unit, bolt11_only.unit);
+        assert_eq!(
+            all.bolt11
+                .map(|s| (s.mpp, s.amountless, s.invoice_description)),
+            bolt11_only
+                .bolt11
+                .map(|s| (s.mpp, s.amountless, s.invoice_description))
+        );
+    }
+
     use super::*;
     use bitcoin::secp256k1::{Keypair, PublicKey, Secp256k1, SecretKey};
     use cdk_common::payment::Bolt12OutgoingPaymentOptions;

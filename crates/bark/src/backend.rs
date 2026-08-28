@@ -3282,6 +3282,104 @@ mod tests {
         assert!(settings.custom.is_empty());
     }
 
+    /// The rails a `SettingsResponse` actually claims, derived from the response
+    /// rather than restated, so this tracks the real filtering.
+    fn advertised_rails(methods: &[AdvertisedMethod]) -> std::collections::BTreeSet<String> {
+        let settings = settings_response(methods);
+        let mut rails = std::collections::BTreeSet::new();
+        if settings.bolt11.is_some() {
+            rails.insert("bolt11".to_string());
+        }
+        if settings.bolt12.is_some() {
+            rails.insert("bolt12".to_string());
+        }
+        if settings.onchain.is_some() {
+            rails.insert("onchain".to_string());
+        }
+        rails.extend(settings.custom.keys().cloned());
+        rails
+    }
+
+    fn rails(names: &[&str]) -> std::collections::BTreeSet<String> {
+        names.iter().map(|name| name.to_string()).collect()
+    }
+
+    #[test]
+    fn deployment_matrix_leaves_no_rail_contested() {
+        // A mint keys its backends by (unit, method) and refuses a duplicate
+        // pair, so a deployment is valid exactly when the backends' advertised
+        // rails are disjoint. Companion rails below are the defaults those
+        // backends advertise: cdk-cln and cdk-payment-processor-ldk-server both
+        // claim bolt11 and bolt12, and neither serves on-chain.
+        let cases: &[(&str, &[AdvertisedMethod], &[&str], &[&str])] = &[
+            (
+                "bark alone",
+                &AdvertisedMethod::ALL,
+                &[],
+                &["bolt11", "onchain", "arkoor"],
+            ),
+            (
+                "bark on-chain + Core Lightning",
+                &[AdvertisedMethod::Onchain, AdvertisedMethod::Arkoor],
+                &["bolt11", "bolt12"],
+                &["bolt11", "bolt12", "onchain", "arkoor"],
+            ),
+            (
+                "bark on-chain + LDK Server",
+                &[AdvertisedMethod::Onchain, AdvertisedMethod::Arkoor],
+                &["bolt11", "bolt12"],
+                &["bolt11", "bolt12", "onchain", "arkoor"],
+            ),
+            (
+                "bark takes Lightning, companion keeps bolt12 only",
+                &[
+                    AdvertisedMethod::Bolt11,
+                    AdvertisedMethod::Onchain,
+                    AdvertisedMethod::Arkoor,
+                ],
+                &["bolt12"],
+                &["bolt11", "bolt12", "onchain", "arkoor"],
+            ),
+            (
+                "bark on-chain + CLN on bolt11 + LDK Server on bolt12",
+                &[AdvertisedMethod::Onchain, AdvertisedMethod::Arkoor],
+                &["bolt11", "bolt12"],
+                &["bolt11", "bolt12", "onchain", "arkoor"],
+            ),
+        ];
+
+        for (name, bark, companions, expected) in cases {
+            let bark_rails = advertised_rails(bark);
+            let companion_rails = rails(companions);
+
+            let contested: Vec<_> = bark_rails.intersection(&companion_rails).collect();
+            assert!(
+                contested.is_empty(),
+                "{name}: bark and its companion both claim {contested:?}, \
+                 which the mint would reject as a duplicate (unit, method) pair"
+            );
+
+            let covered: std::collections::BTreeSet<String> =
+                bark_rails.union(&companion_rails).cloned().collect();
+            assert_eq!(covered, rails(expected), "{name}: rails covered");
+        }
+    }
+
+    #[test]
+    fn the_default_configuration_contests_lightning_with_any_lightning_backend() {
+        // Why the setting has to exist. Left at its default, bark claims bolt11,
+        // so pairing it with CLN or LDK Server is not a valid deployment at all
+        // -- the second registration hits the same key and the mint refuses it.
+        let bark_rails = advertised_rails(&AdvertisedMethod::ALL);
+        for companion in ["Core Lightning", "LDK Server"] {
+            let companion_rails = rails(&["bolt11", "bolt12"]);
+            assert!(
+                bark_rails.contains("bolt11") && companion_rails.contains("bolt11"),
+                "{companion}: expected the default to contest bolt11"
+            );
+        }
+    }
+
     #[test]
     fn advertised_settings_keep_their_values() {
         // Restricting the set must not quietly change the terms of a rail that

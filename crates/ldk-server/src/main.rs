@@ -53,6 +53,7 @@ async fn main() -> Result<()> {
             percent_fee_reserve: cfg.backend.fee_reserve_percent,
         },
         max_payment_scan_pages: cfg.backend.max_payment_scan_pages,
+        advertised_methods: cfg.backend.advertised_methods()?,
     };
     let backend = Arc::new(LdkServerBackend::new(backend_cfg)?);
 

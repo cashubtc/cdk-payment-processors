@@ -24,3 +24,15 @@ tls_cert_path = "certs/ldk-server.crt"
 fee_reserve_min_sat = 2
 fee_reserve_percent = 0.01
 max_payment_scan_pages = 32
+
+# Payment methods this backend advertises to the mint.
+#
+# A mint picks its backend per (unit, method) pair and claims every method a
+# backend advertises. Leave this unset to advertise everything supported.
+#
+# Name a subset to run alongside another backend, for example to leave bolt11
+# to a different processor:
+#   payment_methods = ["bolt12"]
+#
+# Supported values: bolt11, bolt12
+# payment_methods = ["bolt11", "bolt12"]

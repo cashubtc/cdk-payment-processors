@@ -62,6 +62,7 @@ values.
 | `backend.fee_reserve_min_sat` | `LDK_FEE_RESERVE_MIN_SAT` | `2` |
 | `backend.fee_reserve_percent` | `LDK_FEE_RESERVE_PERCENT` | `0.01` |
 | `backend.max_payment_scan_pages` | `LDK_MAX_PAYMENT_SCAN_PAGES` | `32` |
+| `backend.payment_methods` | `LDK_PAYMENT_METHODS` | all supported |
 
 Boolean environment variables accept only the literal values `true` and
 `false`.
@@ -77,6 +78,35 @@ cleartext on any bind address so it can be used in containers; startup logs a
 warning with the effective address and a stronger exposure warning for
 non-loopback binds. Configure mutual TLS whenever the network is not fully
 trusted.
+
+### Advertised payment methods
+
+A CDK mint selects its backend per `(unit, method)` pair, and registers a
+backend for every method that backend advertises in its settings. By default
+this processor advertises `bolt11` and `bolt12`, so a mint backed only by it
+serves both without extra configuration.
+
+That default makes it the only Lightning backend a mint can have, because a
+second backend offering `bolt11` would collide on the same `(unit, method)` pair
+and the mint rejects the duplicate. Set `backend.payment_methods` to advertise a
+subset instead, which frees the remaining rails for another backend:
+
+```toml
+[backend]
+# Keep bolt12 here and leave bolt11 to another processor.
+payment_methods = ["bolt12"]
+```
+
+The environment form takes a comma-separated list:
+
+```bash
+LDK_PAYMENT_METHODS=bolt12
+```
+
+Supported values are `bolt11` and `bolt12`. Names are case-insensitive and
+surrounding whitespace is ignored. An unrecognised name fails at startup rather
+than being skipped, so a typo cannot silently drop a rail. Leaving the setting
+unset, empty, or absent advertises everything.
 
 ## Startup self-check
 

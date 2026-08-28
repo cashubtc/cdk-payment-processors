@@ -30,6 +30,7 @@ use cdk_common::util::hex;
 use cdk_common::{CurrencyUnit, MeltQuoteState, QuoteId};
 use cdk_payment_processor::PaymentProcessorClient;
 use cdk_payment_processor_ldk_server::backend::{Config as BackendConfig, LdkServerBackend};
+use cdk_payment_processor_ldk_server::settings::AdvertisedMethod;
 use corepc_node::Node;
 use futures::{Stream, StreamExt};
 use ldk_server_client::client::{EventStream, LdkServerClient};
@@ -450,6 +451,7 @@ fn backend_config(node: &LdkNode) -> BackendConfig {
             percent_fee_reserve: 0.01,
         },
         max_payment_scan_pages: 32,
+        advertised_methods: AdvertisedMethod::ALL.to_vec(),
     }
 }
 
