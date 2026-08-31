@@ -3,6 +3,13 @@
 A collection of self-contained Cargo projects implementing CDK Payment
 Processors (`MintPayment` interface over gRPC).
 
+| Processor | Unit | BOLT11 | BOLT12 | On-chain | Custom | BOLT11 Amountless | BOLT11 MPP | BOLT11 Descriptions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [Bark](crates/bark/README.md) | `sat` | ✅ | ❌ | ✅ | `arkoor` | ❌ | ❌ | ✅ |
+| [LDK Server](crates/ldk-server/README.md) | `msat` | ✅ | ✅ | ❌ | - | ✅ | ❌ | ✅ |
+| [Spark](crates/spark/README.md) | `sat` | ✅ | ❌ | ❌ | - | ❌ | ❌ | ❌ |
+| [Template](crates/template/README.md) | `sat` | ✅ | ❌ | ❌ | - | ❌ | ❌ | ✅ |
+
 ## Project structure
 
 ```text
@@ -15,12 +22,7 @@ crates/
 
 Each processor has its own `Cargo.toml`, `Cargo.lock`, configuration example,
 and documentation. The crates intentionally do not share a Cargo workspace,
-so dependency resolution and reproducible builds are independent:
-
-- [Bark](crates/bark/README.md)
-- [LDK Server](crates/ldk-server/README.md)
-- [Spark](crates/spark/README.md)
-- [Template](crates/template/README.md)
+so dependency resolution and reproducible builds are independent.
 
 Check or test every crate from the repository root:
 
