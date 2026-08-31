@@ -3,12 +3,21 @@
 A collection of self-contained Cargo projects implementing CDK Payment
 Processors (`MintPayment` interface over gRPC).
 
-| Processor | Unit | BOLT11 | BOLT12 | On-chain | Custom | BOLT11 Amountless | BOLT11 MPP | BOLT11 Descriptions |
+| Processor | Unit | BOLT11 | BOLT12 | On-chain | Custom |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| [Bark](crates/bark/README.md) | `sat` | ✅ | ❌ | ✅ | `arkoor` | ❌ | ❌ | ✅ |
-| [LDK Server](crates/ldk-server/README.md) | `msat` | ✅ | ✅ | ❌ | - | ✅ | ❌ | ✅ |
-| [Spark](crates/spark/README.md) | `sat` | ✅ | ❌ | ❌ | - | ❌ | ❌ | ❌ |
-| [Template](crates/template/README.md) | `sat` | ✅ | ❌ | ❌ | - | ❌ | ❌ | ✅ |
+| [Bark](crates/bark/README.md) | `sat` | ✅ | ❌ | ✅ | `arkoor` |
+| [LDK Server](crates/ldk-server/README.md) | `msat` | ✅ | ✅ | ❌ | - |
+| [Spark](crates/spark/README.md) | `sat` | ✅ | ❌ | ❌ | - |
+| [Template](crates/template/README.md) | `sat` | ✅ | ❌ | ❌ | - |
+
+BOLT11 features:
+
+| Processor | Amountless Invoices | MPP | Invoice Descriptions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| [Bark](crates/bark/README.md) | ❌ | ❌ | ✅ |
+| [LDK Server](crates/ldk-server/README.md) | ✅ | ❌ | ✅ |
+| [Spark](crates/spark/README.md) | ❌ | ❌ | ❌ |
+| [Template](crates/template/README.md) | ❌ | ❌ | ✅ |
 
 ## Project structure
 
