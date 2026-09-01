@@ -4,7 +4,10 @@ A CDK payment processor backed by an [LDK Server](https://github.com/lightningde
 
 The processor correlates outgoing LDK payment events with CDK melt quote IDs.
 When a payment initially returns as pending, a later success event finalizes
-the melt and a permanent failure event allows CDK to compensate it.
+the melt and a permanent failure event allows CDK to compensate it. Terminal
+events that arrive before the quote ID is known are buffered briefly and
+replayed when `make_payment` registers the payment, so the event stream never
+sleeps waiting for correlation.
 
 ```text
 cdk-mintd (payment_backend = "grpcprocessor")
