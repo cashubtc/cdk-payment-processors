@@ -2,6 +2,10 @@
 
 A CDK payment processor backed by an [LDK Server](https://github.com/lightningdevkit/ldk-server) node. Exposes the node to `cdk-mintd` over the CDK payment processor gRPC protocol, with BOLT11 and BOLT12 (offers) support.
 
+The processor correlates outgoing LDK payment events with CDK melt quote IDs.
+When a payment initially returns as pending, a later success event finalizes
+the melt and a permanent failure event allows CDK to compensate it.
+
 ```text
 cdk-mintd (payment_backend = "grpcprocessor")
   -> gRPC        cdk-payment-processor-ldk-server (this crate)
@@ -85,7 +89,9 @@ processor binary against two live `ldk-server` daemons (a payer node funding a
 channel to the mint-side node) on a regtest `bitcoind`. It covers BOLT11 and
 BOLT12 receive/send, quote fee math, held-HTLC pending/failed semantics,
 invoice expiry, processor restarts, event streaming, and a full Cashu
-mint/melt round trip.
+mint/melt round trip. It prints progress between scenario groups and applies a
+timeout to Cashu melt confirmation so event-delivery regressions fail with a
+clear error instead of waiting indefinitely.
 
 ```bash
 just test-regtest

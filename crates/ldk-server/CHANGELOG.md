@@ -38,6 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Outgoing LDK payment success and failure events are now correlated with CDK
+  melt quote IDs, allowing pending melts to finalize or compensate instead of
+  waiting indefinitely. The regtest suite also reports scenario progress and
+  bounds Cashu melt confirmation waits.
 - The payment processor now fails closed without TLS unless plaintext is
   explicitly enabled with `allow_insecure`, warning more strongly when the
   effective bind address is not loopback.

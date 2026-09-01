@@ -1257,12 +1257,13 @@ async fn cashu_scenario(
     assert_eq!(melt_quote.state, CashuMeltState::Unpaid);
 
     let before = wallet.total_balance().await?.to_u64();
-    let finalized = wallet
+    let prepared = wallet
         .prepare_melt(&melt_quote.id, Default::default())
         .await
-        .context("prepare cashu melt")?
-        .confirm()
+        .context("prepare cashu melt")?;
+    let finalized = tokio::time::timeout(NETWORK_TIMEOUT, prepared.confirm())
         .await
+        .context("Cashu melt confirmation timed out")?
         .context("confirm cashu melt")?;
     assert_eq!(finalized.state(), CashuMeltState::Paid);
     assert!(finalized.payment_proof().is_some());
@@ -1296,9 +1297,9 @@ async fn cashu_scenario(
         .prepare_melt(&failure_quote.id, Default::default())
         .await
         .context("prepare failing cashu melt")?;
-    let outcome = prepared
-        .confirm_prefer_async()
+    let outcome = tokio::time::timeout(NETWORK_TIMEOUT, prepared.confirm_prefer_async())
         .await
+        .context("failing Cashu melt dispatch timed out")?
         .context("dispatch failing cashu melt")?;
     match outcome {
         MeltOutcome::Pending(_) => {}
@@ -1374,6 +1375,7 @@ async fn ldk_server_regtest_suite() -> Result<()> {
 
     let backend = LdkServerBackend::new(backend_config(&mint_node))?;
 
+    eprintln!("running direct backend scenarios");
     settings_scenario(&backend)
         .await
         .context("settings scenario")?;
@@ -1395,15 +1397,20 @@ async fn ldk_server_regtest_suite() -> Result<()> {
     expiry_scenarios(&payer, &backend)
         .await
         .context("expiry scenarios")?;
+    eprintln!("direct backend scenarios complete");
 
     let logs = run_dir.join("logs");
+    eprintln!("running processor restart scenario");
     processor_scenario(&payer, &mint_node, &logs)
         .await
         .context("black-box processor process")?;
+    eprintln!("processor restart scenario complete");
+    eprintln!("running Cashu mint/melt scenario");
     let process = ProcessorProcess::spawn(&mint_node, pick_port(), &logs).await?;
     cashu_scenario(&payer, &run_dir, process)
         .await
         .context("full Cashu mint/melt")?;
+    eprintln!("Cashu mint/melt scenario complete");
 
     eprintln!("regtest artifacts kept in {}", run_dir.display());
     Ok(())
