@@ -308,7 +308,10 @@ impl MintPayment for LdkServerBackend {
                 amountless: true,
                 invoice_description: true,
             }),
-            bolt12: Some(payment::Bolt12Settings { amountless: true }),
+            bolt12: Some(payment::Bolt12Settings {
+                amountless: true,
+                invoice_description: true,
+            }),
             onchain: None,
             custom: std::collections::HashMap::new(),
         })
@@ -1038,7 +1041,7 @@ mod tests {
         )
         .expect_err("paid payment details without amount should fail");
 
-        assert!(matches!(err, payment::Error::Lightning(_)));
+        assert!(matches!(err, payment::Error::Backend(_)));
     }
 
     #[test]

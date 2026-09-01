@@ -538,7 +538,7 @@ impl ProcessorProcess {
 
     async fn client(&self) -> Result<PaymentProcessorClient> {
         eventually("processor readiness", Duration::from_secs(30), || async {
-            match PaymentProcessorClient::new("http://127.0.0.1", self.port, None).await {
+            match PaymentProcessorClient::new("127.0.0.1", self.port, None).await {
                 Ok(client) => Ok(Some(client)),
                 Err(_) => Ok(None),
             }

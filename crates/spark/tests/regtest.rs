@@ -349,7 +349,7 @@ impl ProcessorProcess {
     async fn client(&mut self) -> Result<PaymentProcessorClient> {
         let deadline = Instant::now() + Duration::from_secs(60);
         loop {
-            match PaymentProcessorClient::new("http://127.0.0.1", self.port, None).await {
+            match PaymentProcessorClient::new("127.0.0.1", self.port, None).await {
                 Ok(client) => return Ok(client),
                 Err(_) => {
                     if let Ok(Some(status)) = self.child.try_wait() {

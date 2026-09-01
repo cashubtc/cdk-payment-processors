@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
+  4.0.0, including BOLT12 description capability advertisement and
+  scheme-free client hosts.
+- TLS mode now authenticates mint clients with `tls_client_ca_path`.
+- Updated the documented `cdk-mintd` configuration for the 0.18
+  database-authoritative payment-backend model.
+
 - Replaced the `CDK_LDK_*` environment namespace with shared `SERVER_*`,
   `TLS_*`, and `ALLOW_INSECURE` variables plus backend-specific `LDK_*`
   variables. Environment values are now applied through Figment providers,

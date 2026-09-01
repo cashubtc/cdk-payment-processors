@@ -66,6 +66,7 @@ const COMPLETED_LIGHTNING_SENDS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("completed_lightning_sends");
 const ARKOOR_SEND_INTENTS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("arkoor_send_intents");
+const ARKOOR_QUOTES_TABLE: TableDefinition<&str, &str> = TableDefinition::new("arkoor_quotes");
 const COMPLETED_ARKOOR_SENDS_TABLE: TableDefinition<&str, &str> =
     TableDefinition::new("completed_arkoor_sends");
 // Per-scan rotation cursors so capped scans resume where the last scan
@@ -183,6 +184,12 @@ struct LightningSendIntentRecord {
     #[serde(default)]
     fee_reconciled: bool,
     state: LightningSendIntentState,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ArkoorQuoteRecord {
+    request: String,
+    amount_sat: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -747,6 +754,39 @@ impl BarkStateStore {
                 .map_err(Self::store_error)?;
         }
         tx.commit().map_err(Self::store_error)
+    }
+
+    fn put_arkoor_quote(
+        &self,
+        quote_id: &str,
+        quote: &ArkoorQuoteRecord,
+    ) -> Result<(), cdk_common::payment::Error> {
+        let tx = self.db.begin_write().map_err(Self::store_error)?;
+        {
+            let mut table = tx
+                .open_table(ARKOOR_QUOTES_TABLE)
+                .map_err(Self::store_error)?;
+            let value = serde_json::to_string(quote).map_err(Self::store_error)?;
+            table
+                .insert(quote_id, value.as_str())
+                .map_err(Self::store_error)?;
+        }
+        tx.commit().map_err(Self::store_error)
+    }
+
+    fn get_arkoor_quote(
+        &self,
+        quote_id: &str,
+    ) -> Result<Option<ArkoorQuoteRecord>, cdk_common::payment::Error> {
+        let tx = self.db.begin_read().map_err(Self::store_error)?;
+        let table = tx
+            .open_table(ARKOOR_QUOTES_TABLE)
+            .map_err(Self::store_error)?;
+        table
+            .get(quote_id)
+            .map_err(Self::store_error)?
+            .map(|value| serde_json::from_str(value.value()).map_err(Self::store_error))
+            .transpose()
     }
 
     fn get_arkoor_send(
@@ -2040,34 +2080,62 @@ impl BarkBackend {
     fn parse_arkoor_request(
         method: &str,
         request: &str,
+        amount: Option<&Amount<CurrencyUnit>>,
         extra_json: Option<&str>,
+        quoted_amount_sat: Option<u64>,
     ) -> Result<(ark::Address, u64), cdk_common::payment::Error> {
-        // cdk-payment-processor 0.17.3 does not carry the custom method name
+        // The current payment-processor protocol does not carry the custom method name
         // over gRPC. Bark exposes only one custom method, so an empty method
-        // is unambiguous and remains compatible with that protocol version.
+        // is unambiguous.
         if !method.is_empty() && method != ARKOOR_PAYMENT_METHOD {
             return Err(cdk_common::payment::Error::UnsupportedPaymentOption);
         }
 
         let address = ark::Address::from_str(request)
             .map_err(|e| cdk_common::payment::Error::Custom(format!("Invalid Ark address: {e}")))?;
-        let extra_json = extra_json.ok_or_else(|| {
+
+        let typed_amount_sat = amount
+            .map(|amount| {
+                if amount.unit() != &CurrencyUnit::Sat || amount.value() == 0 {
+                    return Err(cdk_common::payment::Error::Custom(
+                        "Arkoor amount must be a positive sat amount".to_string(),
+                    ));
+                }
+                Ok(amount.value())
+            })
+            .transpose()?;
+        let extra_amount_sat = extra_json
+            .map(|extra_json| {
+                let extra: serde_json::Value = serde_json::from_str(extra_json).map_err(|e| {
+                    cdk_common::payment::Error::Custom(format!("Invalid arkoor extra_json: {e}"))
+                })?;
+                extra
+                    .get("amount_sat")
+                    .and_then(serde_json::Value::as_u64)
+                    .filter(|amount| *amount > 0)
+                    .ok_or_else(|| {
+                        cdk_common::payment::Error::Custom(
+                            "Arkoor extra_json.amount_sat must be a positive integer".to_string(),
+                        )
+                    })
+            })
+            .transpose()?;
+
+        let candidates = [typed_amount_sat, extra_amount_sat, quoted_amount_sat];
+        let amount_sat = candidates.into_iter().flatten().next().ok_or_else(|| {
             cdk_common::payment::Error::Custom(
-                "Arkoor payments require extra_json.amount_sat".to_string(),
+                "Arkoor payments require a typed amount or extra_json.amount_sat".to_string(),
             )
         })?;
-        let extra: serde_json::Value = serde_json::from_str(extra_json).map_err(|e| {
-            cdk_common::payment::Error::Custom(format!("Invalid arkoor extra_json: {e}"))
-        })?;
-        let amount_sat = extra
-            .get("amount_sat")
-            .and_then(serde_json::Value::as_u64)
-            .filter(|amount| *amount > 0)
-            .ok_or_else(|| {
-                cdk_common::payment::Error::Custom(
-                    "Arkoor extra_json.amount_sat must be a positive integer".to_string(),
-                )
-            })?;
+        if candidates
+            .into_iter()
+            .flatten()
+            .any(|candidate| candidate != amount_sat)
+        {
+            return Err(cdk_common::payment::Error::Custom(
+                "Arkoor payment amount does not match the quoted amount".to_string(),
+            ));
+        }
 
         Ok((address, amount_sat))
     }
@@ -2076,9 +2144,12 @@ impl BarkBackend {
         &self,
         method: &str,
         request: &str,
+        amount: Option<&Amount<CurrencyUnit>>,
         extra_json: Option<&str>,
+        quoted_amount_sat: Option<u64>,
     ) -> Result<(ark::Address, u64), cdk_common::payment::Error> {
-        let (address, amount_sat) = Self::parse_arkoor_request(method, request, extra_json)?;
+        let (address, amount_sat) =
+            Self::parse_arkoor_request(method, request, amount, extra_json, quoted_amount_sat)?;
         self.wallet
             .validate_arkoor_address(&address)
             .await
@@ -2552,9 +2623,18 @@ impl MintPayment for BarkBackend {
                     .validate_arkoor_request(
                         &opts.method,
                         &opts.request,
+                        opts.amount.as_ref(),
                         opts.extra_json.as_deref(),
+                        None,
                     )
                     .await?;
+                self.state_store.put_arkoor_quote(
+                    &opts.quote_id.to_string(),
+                    &ArkoorQuoteRecord {
+                        request: opts.request.clone(),
+                        amount_sat,
+                    },
+                )?;
                 Ok(PaymentQuoteResponse {
                     request_lookup_id: Some(PaymentIdentifier::QuoteId(opts.quote_id.clone())),
                     amount: Amount::new(amount_sat, CurrencyUnit::Sat),
@@ -2590,11 +2670,23 @@ impl MintPayment for BarkBackend {
                     return self.arkoor_send_response(&existing, false);
                 }
 
+                let quoted = self.state_store.get_arkoor_quote(&quote_id)?;
+                if quoted
+                    .as_ref()
+                    .is_some_and(|quote| quote.request != opts.request)
+                {
+                    return Err(cdk_common::payment::Error::Custom(
+                        "Arkoor request does not match the quoted request".to_string(),
+                    ));
+                }
+
                 let (address, amount_sat) = self
                     .validate_arkoor_request(
                         &opts.method,
                         &opts.request,
+                        opts.amount.as_ref(),
                         opts.extra_json.as_deref(),
+                        quoted.as_ref().map(|quote| quote.amount_sat),
                     )
                     .await?;
                 let successful_payments_before = self
@@ -3214,20 +3306,65 @@ mod tests {
         let (_, amount_sat) = BarkBackend::parse_arkoor_request(
             ARKOOR_PAYMENT_METHOD,
             address,
+            None,
             Some(r#"{"amount_sat":1234}"#),
+            None,
         )
         .expect("valid arkoor request");
         assert_eq!(amount_sat, 1_234);
 
-        // cdk-payment-processor 0.17.3 drops the custom method name on the
+        let typed_amount = Amount::new(2_345, CurrencyUnit::Sat);
+        assert_eq!(
+            BarkBackend::parse_arkoor_request(
+                ARKOOR_PAYMENT_METHOD,
+                address,
+                Some(&typed_amount),
+                None,
+                None,
+            )
+            .expect("valid typed arkoor amount")
+            .1,
+            2_345
+        );
+        assert_eq!(
+            BarkBackend::parse_arkoor_request(
+                ARKOOR_PAYMENT_METHOD,
+                address,
+                None,
+                None,
+                Some(3_456),
+            )
+            .expect("persisted quote amount")
+            .1,
+            3_456
+        );
+        assert!(BarkBackend::parse_arkoor_request(
+            ARKOOR_PAYMENT_METHOD,
+            address,
+            Some(&typed_amount),
+            Some(r#"{"amount_sat":2346}"#),
+            None,
+        )
+        .is_err());
+
+        // The payment-processor protocol drops the custom method name on the
         // wire, so Bark intentionally accepts the unambiguous empty method.
-        assert!(
-            BarkBackend::parse_arkoor_request("", address, Some(r#"{"amount_sat":1}"#)).is_ok()
-        );
-        assert!(
-            BarkBackend::parse_arkoor_request("unknown", address, Some(r#"{"amount_sat":1}"#))
-                .is_err()
-        );
+        assert!(BarkBackend::parse_arkoor_request(
+            "",
+            address,
+            None,
+            Some(r#"{"amount_sat":1}"#),
+            None,
+        )
+        .is_ok());
+        assert!(BarkBackend::parse_arkoor_request(
+            "unknown",
+            address,
+            None,
+            Some(r#"{"amount_sat":1}"#),
+            None,
+        )
+        .is_err());
 
         for extra in [
             None,
@@ -3237,14 +3374,21 @@ mod tests {
             Some(r#"{"amount_sat":"1"}"#),
             Some(r#"{}"#),
         ] {
-            assert!(
-                BarkBackend::parse_arkoor_request(ARKOOR_PAYMENT_METHOD, address, extra).is_err()
-            );
+            assert!(BarkBackend::parse_arkoor_request(
+                ARKOOR_PAYMENT_METHOD,
+                address,
+                None,
+                extra,
+                None,
+            )
+            .is_err());
         }
         assert!(BarkBackend::parse_arkoor_request(
             ARKOOR_PAYMENT_METHOD,
             "not-an-ark-address",
-            Some(r#"{"amount_sat":1}"#)
+            None,
+            Some(r#"{"amount_sat":1}"#),
+            None,
         )
         .is_err());
     }
@@ -3288,6 +3432,15 @@ mod tests {
             store
                 .put_arkoor_send(&arkoor_quote, &arkoor_send(&arkoor_quote))
                 .unwrap();
+            store
+                .put_arkoor_quote(
+                    &arkoor_quote,
+                    &ArkoorQuoteRecord {
+                        request: "ark-address".to_string(),
+                        amount_sat: 1_000,
+                    },
+                )
+                .unwrap();
             store.mark_arkoor_send_completed(&arkoor_quote).unwrap();
             store.put_scan_cursor("test-scan", "last-key").unwrap();
         }
@@ -3314,6 +3467,13 @@ mod tests {
             .is_some());
         assert!(reopened.is_lightning_send_completed(&payment_hash).unwrap());
         assert!(reopened.get_arkoor_send(&arkoor_quote).unwrap().is_some());
+        assert_eq!(
+            reopened
+                .get_arkoor_quote(&arkoor_quote)
+                .unwrap()
+                .map(|quote| quote.amount_sat),
+            Some(1_000)
+        );
         assert!(reopened.is_arkoor_send_completed(&arkoor_quote).unwrap());
         assert_eq!(
             reopened.get_scan_cursor("test-scan").unwrap().as_deref(),

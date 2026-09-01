@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend configuration structure matching config.toml
 
 ### Changed
+- Updated the template to CDK `0.18.0-rc.3` and payment-processor protocol
+  4.0.0.
+- TLS mode now authenticates mint clients with `tls_client_ca_path`, and the
+  documentation describes the CDK 0.18 mint configuration model.
 - Configuration environment variables are now applied through reusable
   Figment providers, and boolean environment values accept only `true` or
   `false`.

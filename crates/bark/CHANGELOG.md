@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
+  4.0.0, including typed custom-payment amounts and scheme-free client hosts.
+- Arkoor quotes persist the resolved amount by quote ID and retain
+  `extra_json.amount_sat` as a compatibility fallback.
+- TLS mode now authenticates mint clients with `tls_client_ca_path`.
+
 - Configuration environment variables are now applied through Figment
   providers, and boolean environment values accept only `true` or `false`.
 - Updated the CDK integration to `cdk-common` and `cdk-payment-processor`

@@ -95,6 +95,9 @@ pub struct Config {
     pub tls_cert_path: String,
     #[serde(default = "default_tls_key_path")]
     pub tls_key_path: String,
+    /// PEM CA certificate used to authenticate mint clients.
+    #[serde(default = "default_tls_client_ca_path")]
+    pub tls_client_ca_path: String,
 }
 
 fn default_address() -> String {
@@ -113,6 +116,10 @@ fn default_tls_key_path() -> String {
     "certs/server.key".to_string()
 }
 
+fn default_tls_client_ca_path() -> String {
+    "certs/ca.pem".to_string()
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -123,6 +130,7 @@ impl Default for Config {
             allow_insecure: false,
             tls_cert_path: default_tls_cert_path(),
             tls_key_path: default_tls_key_path(),
+            tls_client_ca_path: default_tls_client_ca_path(),
         }
     }
 }

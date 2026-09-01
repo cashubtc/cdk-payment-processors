@@ -21,8 +21,8 @@ regtest-tests = [
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
-cdk-common = { version = "0.17.3", default-features = false, features = ["mint", "grpc"] }
-cdk-payment-processor = { version = "0.17.3", default-features = false }
+cdk-common = { version = "=0.18.0-rc.3", default-features = false, features = ["mint", "grpc"] }
+cdk-payment-processor = { version = "=0.18.0-rc.3", default-features = false }
 figment = { version = "0.10", features = ["env", "toml"] }
 serde = { version = "1", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "process", "sync", "net"] }
@@ -50,9 +50,9 @@ ark-testing = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6
 axum = { version = "0.8", optional = true }
 bark-cln-rpc = { git = "https://gitlab.com/ark-bitcoin/bark.git", tag = "bark-0.6.2", optional = true }
 bitcoincore-rpc = { version = "0.19", optional = true }
-cdk = { version = "0.17.3", default-features = false, features = ["mint", "wallet"], optional = true }
-cdk-axum = { version = "0.17.3", optional = true }
-cdk-sqlite = { version = "0.17.3", default-features = false, features = ["mint", "wallet"], optional = true }
+cdk = { version = "=0.18.0-rc.3", default-features = false, features = ["mint", "wallet"], optional = true }
+cdk-axum = { version = "=0.18.0-rc.3", optional = true }
+cdk-sqlite = { version = "=0.18.0-rc.3", default-features = false, features = ["mint", "wallet"], optional = true }
 
 [[test]]
 name = "regtest"

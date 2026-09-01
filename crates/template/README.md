@@ -348,6 +348,7 @@ The template provides these base configuration options:
 - `ALLOW_INSECURE` - Explicitly allow plaintext gRPC (default: false)
 - `TLS_CERT_PATH` - Path to a PEM-encoded TLS certificate or certificate chain (default: certs/server.crt)
 - `TLS_KEY_PATH` - Path to the PEM-encoded TLS private key (default: certs/server.key)
+- `TLS_CLIENT_CA_PATH` - Path to the PEM CA used to authenticate mint clients (default: certs/ca.pem)
 
 The example backend fields are available as `TEMPLATE_API_URL` and
 `TEMPLATE_API_KEY`. Change `BACKEND_ENV_PREFIX` when adapting the template;
@@ -366,6 +367,7 @@ tls_enable = false
 allow_insecure = true # Explicit cleartext opt-in
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
+tls_client_ca_path = "certs/ca.pem"
 
 # Add your backend configuration
 [backend]
@@ -375,17 +377,24 @@ api_key = "your-key-here"
 
 ### Transport Security
 
-Set `tls_enable = true` to serve gRPC over TLS. `tls_cert_path` must point to a
-PEM-encoded server certificate or certificate chain, and `tls_key_path` must
-point to its PEM-encoded private key. The process fails during startup if
-either file cannot be read or the TLS identity is invalid.
+Set `tls_enable = true` to serve gRPC over mutual TLS. `tls_cert_path` and
+`tls_key_path` configure the server identity; `tls_client_ca_path` must contain
+the CA certificate that signed the mint's `client.pem`. Configure the mint's
+`[grpc_processor].tls_dir` with `ca.pem`, `client.pem`, and `client.key`.
+The process fails during startup if any configured file cannot be read.
 
 Without TLS, startup fails unless `allow_insecure = true` (or
 `ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits cleartext
 on any bind address so it can be used in containers; startup logs a warning
 with the effective address and a stronger exposure warning for non-loopback
-binds. Configure TLS with `tls_enable = true` and
-`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
+binds. Configure mutual TLS whenever the network is not fully trusted.
+
+For CDK 0.18, configure `cdk-mintd` with `[payment_backend]` using
+`backend = "grpcprocessor"` and a `[grpc_processor]` section containing
+`supported_units`, a bare `address` without a URI scheme, `port`, and either
+`tls_dir` or `allow_insecure = true`. Existing mint operators must follow the
+[CDK v0.18 migration guide](https://github.com/cashubtc/cdk/blob/main/docs/migrations/v0.18.md)
+before startup.
 
 ## gRPC API
 

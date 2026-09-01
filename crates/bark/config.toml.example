@@ -9,6 +9,7 @@ tls_enable = false
 allow_insecure = true
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
+tls_client_ca_path = "certs/ca.pem"
 
 # Bark backend configuration
 [backend]
