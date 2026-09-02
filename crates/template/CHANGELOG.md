@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend configuration structure matching config.toml
 
 ### Changed
+- Renamed the backend-specific `config.toml` section from `[backend]` to
+  `[template]`.
 - Updated the template to CDK `0.18.0-rc.3` and payment-processor protocol
   4.0.0.
 - TLS mode now authenticates mint clients with `tls_client_ca_path`, and the

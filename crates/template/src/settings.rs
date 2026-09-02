@@ -6,6 +6,7 @@ use figment::{
 use serde::{Deserialize, Serialize};
 
 const BACKEND_ENV_PREFIX: &str = "TEMPLATE_";
+const BACKEND_CONFIG_SECTION: &str = "template";
 
 /// Backend-specific configuration
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -23,9 +24,9 @@ pub struct BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend-specific configuration
+    /// Template backend configuration
     #[serde(default)]
-    pub backend: BackendConfig,
+    pub template: BackendConfig,
 
     /// gRPC server address
     #[serde(default = "default_address")]
@@ -73,7 +74,7 @@ fn default_tls_client_ca_path() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend: BackendConfig::default(),
+            template: BackendConfig::default(),
             address: default_address(),
             port: default_port(),
             tls_enable: false,
@@ -108,7 +109,8 @@ fn config_figment() -> Figment {
         .merge(Env::prefixed("TLS_").map(|key| format!("tls_{}", key.as_str()).into()))
         .merge(Env::raw().only(&["ALLOW_INSECURE"]))
         .merge(
-            Env::prefixed(BACKEND_ENV_PREFIX).map(|key| format!("backend.{}", key.as_str()).into()),
+            Env::prefixed(BACKEND_ENV_PREFIX)
+                .map(|key| format!("{BACKEND_CONFIG_SECTION}.{}", key.as_str()).into()),
         )
 }
 

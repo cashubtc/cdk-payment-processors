@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
 
     // Initialize the Spark backend
     tracing::info!("Initializing Spark payment processor");
-    let backend = Arc::new(SparkBackend::new(cfg.backend).await?);
+    let backend = Arc::new(SparkBackend::new(cfg.spark).await?);
 
     let scheme = if cfg.tls_enable { "https" } else { "http" };
     tracing::info!(

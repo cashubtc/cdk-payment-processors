@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
 
     // Initialize the Bark backend
     tracing::info!("Initializing Bark payment processor");
-    let backend = Arc::new(BarkBackend::new(&cfg.backend).await?);
+    let backend = Arc::new(BarkBackend::new(&cfg.bark).await?);
 
     let scheme = if cfg.tls_enable { "https" } else { "http" };
     tracing::info!(

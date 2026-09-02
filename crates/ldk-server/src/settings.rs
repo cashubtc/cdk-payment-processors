@@ -9,6 +9,7 @@ use figment::{
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 const BACKEND_ENV_PREFIX: &str = "LDK_";
+const BACKEND_CONFIG_SECTION: &str = "ldk";
 
 /// A payment method this backend can advertise to a mint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -152,7 +153,7 @@ impl BackendConfig {
         for name in &self.payment_methods {
             let method = name
                 .parse::<AdvertisedMethod>()
-                .with_context(|| format!("invalid entry in backend.payment_methods: {name:?}"))?;
+                .with_context(|| format!("invalid entry in ldk.payment_methods: {name:?}"))?;
             if !methods.contains(&method) {
                 methods.push(method);
             }
@@ -177,7 +178,7 @@ fn default_max_payment_scan_pages() -> u16 {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default)]
-    pub backend: BackendConfig,
+    pub ldk: BackendConfig,
     /// gRPC listen address for the payment processor.
     #[serde(default = "default_address")]
     pub address: String,
@@ -222,7 +223,7 @@ fn default_tls_client_ca_path() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend: BackendConfig::default(),
+            ldk: BackendConfig::default(),
             address: default_address(),
             port: default_port(),
             tls_enable: false,
@@ -239,20 +240,14 @@ impl Config {
     /// Environment variables override file values.
     pub fn load() -> Result<Self> {
         let cfg = extract_config(config_figment())?;
+        anyhow::ensure!(!cfg.ldk.address.is_empty(), "ldk.address is required");
+        anyhow::ensure!(!cfg.ldk.api_key.is_empty(), "ldk.api_key is required");
         anyhow::ensure!(
-            !cfg.backend.address.is_empty(),
-            "backend.address is required"
-        );
-        anyhow::ensure!(
-            !cfg.backend.api_key.is_empty(),
-            "backend.api_key is required"
-        );
-        anyhow::ensure!(
-            !cfg.backend.tls_cert_path.is_empty(),
-            "backend.tls_cert_path is required"
+            !cfg.ldk.tls_cert_path.is_empty(),
+            "ldk.tls_cert_path is required"
         );
         // Fail at startup rather than silently advertising the wrong set.
-        cfg.backend.advertised_methods()?;
+        cfg.ldk.advertised_methods()?;
         Ok(cfg)
     }
 }
@@ -268,7 +263,8 @@ fn config_figment() -> Figment {
         .merge(Env::prefixed("TLS_").map(|key| format!("tls_{}", key.as_str()).into()))
         .merge(Env::raw().only(&["ALLOW_INSECURE"]))
         .merge(
-            Env::prefixed(BACKEND_ENV_PREFIX).map(|key| format!("backend.{}", key.as_str()).into()),
+            Env::prefixed(BACKEND_ENV_PREFIX)
+                .map(|key| format!("{BACKEND_CONFIG_SECTION}.{}", key.as_str()).into()),
         )
 }
 
@@ -345,7 +341,7 @@ mod tests {
     }
 
     #[test]
-    fn the_environment_variable_reaches_the_backend_config() {
+    fn the_environment_variable_reaches_the_ldk_config() {
         // Proves the whole path: LDK_PAYMENT_METHODS -> figment -> BackendConfig.
         // figment's `parse-value` feature may hand the deserializer a string or
         // an already-split sequence; both are accepted.
@@ -357,7 +353,7 @@ mod tests {
 
         let config = extracted.expect("config with LDK_PAYMENT_METHODS set should parse");
         assert_eq!(
-            config.backend.advertised_methods().unwrap(),
+            config.ldk.advertised_methods().unwrap(),
             vec![AdvertisedMethod::Bolt12]
         );
     }

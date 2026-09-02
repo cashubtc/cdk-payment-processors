@@ -12,6 +12,6 @@ tls_key_path = "certs/server.key"
 tls_client_ca_path = "certs/ca.pem"
 
 # Backend-specific configuration
-[backend]
+[template]
 api_url = "your-api-url-here"
 api_key = "your-api-key-here"

@@ -9,6 +9,7 @@ use figment::{
 use serde::{de, Deserialize, Deserializer, Serialize};
 
 const BACKEND_ENV_PREFIX: &str = "BARK_";
+const BACKEND_CONFIG_SECTION: &str = "bark";
 
 /// A payment method this backend can advertise to a mint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -184,7 +185,7 @@ impl BackendConfig {
         for name in &self.payment_methods {
             let method = name
                 .parse::<AdvertisedMethod>()
-                .with_context(|| format!("invalid entry in backend.payment_methods: {name:?}"))?;
+                .with_context(|| format!("invalid entry in bark.payment_methods: {name:?}"))?;
             if !methods.contains(&method) {
                 methods.push(method);
             }
@@ -199,9 +200,9 @@ impl BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend-specific configuration
+    /// Bark-specific configuration
     #[serde(default)]
-    pub backend: BackendConfig,
+    pub bark: BackendConfig,
 
     /// gRPC server address
     #[serde(default = "default_address")]
@@ -249,7 +250,7 @@ fn default_tls_client_ca_path() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend: BackendConfig::default(),
+            bark: BackendConfig::default(),
             address: default_address(),
             port: default_port(),
             tls_enable: false,
@@ -275,12 +276,12 @@ impl Config {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.backend.event_poll_interval_ms == 0 {
+        if self.bark.event_poll_interval_ms == 0 {
             bail!("BARK_EVENT_POLL_INTERVAL_MS must be greater than zero");
         }
         // Fail at startup rather than silently advertising the wrong set: a
         // misspelled method would otherwise just go missing from the mint.
-        self.backend.advertised_methods()?;
+        self.bark.advertised_methods()?;
         Ok(())
     }
 }
@@ -296,7 +297,8 @@ fn config_figment() -> Figment {
         .merge(Env::prefixed("TLS_").map(|key| format!("tls_{}", key.as_str()).into()))
         .merge(Env::raw().only(&["ALLOW_INSECURE"]))
         .merge(
-            Env::prefixed(BACKEND_ENV_PREFIX).map(|key| format!("backend.{}", key.as_str()).into()),
+            Env::prefixed(BACKEND_ENV_PREFIX)
+                .map(|key| format!("{BACKEND_CONFIG_SECTION}.{}", key.as_str()).into()),
         )
 }
 
@@ -368,7 +370,7 @@ mod tests {
     #[test]
     fn validation_rejects_an_unknown_method_at_startup() {
         let config = Config {
-            backend: config_with(&["lightning"]),
+            bark: config_with(&["lightning"]),
             ..Config::default()
         };
         assert!(config.validate().is_err());
@@ -392,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    fn the_environment_variable_reaches_the_backend_config() {
+    fn the_environment_variable_reaches_the_bark_config() {
         // Proves the whole path: BARK_PAYMENT_METHODS -> figment -> BackendConfig.
         // figment's `parse-value` feature may hand the deserializer either a
         // string or an already-split sequence; both are accepted, and this test
@@ -405,7 +407,7 @@ mod tests {
 
         let config = extracted.expect("config with BARK_PAYMENT_METHODS set should parse");
         assert_eq!(
-            config.backend.advertised_methods().unwrap(),
+            config.bark.advertised_methods().unwrap(),
             vec![AdvertisedMethod::Onchain, AdvertisedMethod::Bolt11]
         );
     }

@@ -51,13 +51,13 @@ cp config.toml.example config.toml
 
 | `config.toml` key | Environment variable | Default |
 | --- | --- | --- |
-| `backend.mnemonic` | `BARK_MNEMONIC` | Required |
-| `backend.server_address` | `BARK_SERVER_ADDRESS` | `https://ark.second.tech` |
-| `backend.esplora_address` | `BARK_ESPLORA_ADDRESS` | `https://mempool.second.tech/api` |
-| `backend.network` | `BARK_NETWORK` | `mainnet` |
-| `backend.data_dir` | `BARK_DATA_DIR` | `.data/bark` |
-| `backend.event_poll_interval_ms` | `BARK_EVENT_POLL_INTERVAL_MS` | `5000` |
-| `backend.payment_methods` | `BARK_PAYMENT_METHODS` | all supported |
+| `bark.mnemonic` | `BARK_MNEMONIC` | Required |
+| `bark.server_address` | `BARK_SERVER_ADDRESS` | `https://ark.second.tech` |
+| `bark.esplora_address` | `BARK_ESPLORA_ADDRESS` | `https://mempool.second.tech/api` |
+| `bark.network` | `BARK_NETWORK` | `mainnet` |
+| `bark.data_dir` | `BARK_DATA_DIR` | `.data/bark` |
+| `bark.event_poll_interval_ms` | `BARK_EVENT_POLL_INTERVAL_MS` | `5000` |
+| `bark.payment_methods` | `BARK_PAYMENT_METHODS` | all supported |
 | `address` | `SERVER_ADDRESS` | `127.0.0.1` |
 | `port` | `SERVER_PORT` | `50051` |
 | `tls_enable` | `TLS_ENABLE` | `false` |
@@ -85,11 +85,11 @@ so a mint backed only by bark serves all three without extra configuration.
 
 That default makes bark the only backend a mint can have, because a second
 backend offering `bolt11` would collide on the same `(unit, method)` pair and
-the mint rejects the duplicate. Set `backend.payment_methods` to advertise a
+the mint rejects the duplicate. Set `bark.payment_methods` to advertise a
 subset instead, which frees the remaining rails for another backend:
 
 ```toml
-[backend]
+[bark]
 # Core Lightning keeps bolt11; this processor serves on-chain deposits only.
 payment_methods = ["onchain"]
 ```
@@ -119,7 +119,7 @@ the Bark boarding fee.
 Background payment polling rotates across Lightning and on-chain receives and
 sends. Each pass is bounded and its scan position is persisted, so a busy
 payment type or large state history cannot indefinitely delay other events,
-including after a restart. `backend.event_poll_interval_ms` controls the delay
+including after a restart. `bark.event_poll_interval_ms` controls the delay
 between passes and must be greater than zero.
 
 ### Arkoor payments

@@ -56,13 +56,13 @@ values.
 | `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
 | `tls_client_ca_path` | `TLS_CLIENT_CA_PATH` | `certs/ca.pem` |
-| `backend.address` | `LDK_ADDRESS` | Required |
-| `backend.api_key` | `LDK_API_KEY` | Required |
-| `backend.tls_cert_path` | `LDK_TLS_CERT_PATH` | Required |
-| `backend.fee_reserve_min_sat` | `LDK_FEE_RESERVE_MIN_SAT` | `2` |
-| `backend.fee_reserve_percent` | `LDK_FEE_RESERVE_PERCENT` | `0.01` |
-| `backend.max_payment_scan_pages` | `LDK_MAX_PAYMENT_SCAN_PAGES` | `32` |
-| `backend.payment_methods` | `LDK_PAYMENT_METHODS` | all supported |
+| `ldk.address` | `LDK_ADDRESS` | Required |
+| `ldk.api_key` | `LDK_API_KEY` | Required |
+| `ldk.tls_cert_path` | `LDK_TLS_CERT_PATH` | Required |
+| `ldk.fee_reserve_min_sat` | `LDK_FEE_RESERVE_MIN_SAT` | `2` |
+| `ldk.fee_reserve_percent` | `LDK_FEE_RESERVE_PERCENT` | `0.01` |
+| `ldk.max_payment_scan_pages` | `LDK_MAX_PAYMENT_SCAN_PAGES` | `32` |
+| `ldk.payment_methods` | `LDK_PAYMENT_METHODS` | all supported |
 
 Boolean environment variables accept only the literal values `true` and
 `false`.
@@ -88,11 +88,11 @@ serves both without extra configuration.
 
 That default makes it the only Lightning backend a mint can have, because a
 second backend offering `bolt11` would collide on the same `(unit, method)` pair
-and the mint rejects the duplicate. Set `backend.payment_methods` to advertise a
+and the mint rejects the duplicate. Set `ldk.payment_methods` to advertise a
 subset instead, which frees the remaining rails for another backend:
 
 ```toml
-[backend]
+[ldk]
 # Keep bolt12 here and leave bolt11 to another processor.
 payment_methods = ["bolt12"]
 ```

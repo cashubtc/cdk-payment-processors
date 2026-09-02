@@ -12,7 +12,7 @@ tls_key_path = "certs/server.key"
 tls_client_ca_path = "certs/ca.pem"
 
 # Bark backend configuration
-[backend]
+[bark]
 # BIP39 mnemonic - REQUIRED
 # Generate with: cargo install bip39-cli && bip39 generate 12
 mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"

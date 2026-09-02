@@ -207,7 +207,7 @@ async fn event_stream_lifecycle_scenario(backend: &SparkBackend) -> Result<()> {
 
 /// The default configuration talks to the hosted Lightspark SSP, which is of
 /// no use against a local federation. Pointing the processor at a dead SSP
-/// through `backend.ssp` must make every Lightning swap fail cleanly instead
+/// through `spark.ssp` must make every Lightning swap fail cleanly instead
 /// of hanging or reporting phantom success.
 async fn dead_ssp_scenarios(fixtures: &TestFixtures, run_dir: &Path) -> Result<()> {
     let mut config = backend_config(
@@ -393,11 +393,11 @@ async fn black_box_processor_scenario(
 
     let data_dir_str = data_dir.to_string_lossy().into_owned();
     let mut toml = format!(
-        "[backend]\nmnemonic = \"{MNEMONIC}\"\nnetwork = \"regtest\"\ndata_dir = \"{data_dir_str}\"\n"
+        "[spark]\nmnemonic = \"{MNEMONIC}\"\nnetwork = \"regtest\"\ndata_dir = \"{data_dir_str}\"\n"
     );
     for operator in &config.operators {
         toml.push_str(&format!(
-            "\n[[backend.operators]]\naddress = \"{}\"\nidentifier = \"{}\"\nidentity_public_key = \"{}\"\n",
+            "\n[[spark.operators]]\naddress = \"{}\"\nidentifier = \"{}\"\nidentity_public_key = \"{}\"\n",
             operator.address, operator.identifier, operator.identity_public_key
         ));
         if let Some(path) = &operator.ca_cert_path {
