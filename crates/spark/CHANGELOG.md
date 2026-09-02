@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-02
+
 ### Added
 - A crate-local `Cargo.lock` and locked development commands for reproducible
   standalone builds.
@@ -98,5 +100,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Extensive inline documentation
 - Example configurations for different backends (Blink, LND, Core Lightning)
 
-[Unreleased]: https://github.com/thesimplekid/cdk-spark-payment-processor/compare/v0.0.1...HEAD
-[0.0.1]: https://github.com/thesimplekid/cdk-spark-payment-processor/releases/tag/v0.0.1
+[Unreleased]: https://github.com/cashubtc/cdk-payment-processors/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cashubtc/cdk-payment-processors/releases/tag/v0.1.0

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-02
+
 ### Added
 
 - A crate-local `Cargo.lock` and locked development commands for reproducible
@@ -137,3 +139,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The placeholder template backend and its unimplemented payment methods.
 - Unused HTTP/2 keep-alive and connection-age configuration.
 - Runtime wallet and payment database files from the tracked source tree.
+
+[Unreleased]: https://github.com/cashubtc/cdk-payment-processors/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cashubtc/cdk-payment-processors/releases/tag/v0.1.0

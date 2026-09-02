@@ -809,7 +809,7 @@ dependencies = [
 
 [[package]]
 name = "cdk-payment-processor-spark"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-02
+
 ### Added
 
 - `ldk.payment_methods` (`LDK_PAYMENT_METHODS`) to restrict which payment
@@ -57,3 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The payment processor now fails closed without TLS unless plaintext is
   explicitly enabled with `allow_insecure`, warning more strongly when the
   effective bind address is not loopback.
+
+[Unreleased]: https://github.com/cashubtc/cdk-payment-processors/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/cashubtc/cdk-payment-processors/releases/tag/v0.1.0

@@ -1,6 +1,6 @@
 [package]
 name = "cdk-payment-processor-bark"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 authors = ["thesimplekid <tsk@thesimplekid.com>"]
 description = "CDK Payment Processor backed by a Bark wallet"
