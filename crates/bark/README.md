@@ -63,6 +63,7 @@ cp config.toml.example config.toml
 | `allow_insecure` | `ALLOW_INSECURE` | `false` |
 | `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
+| `tls_client_ca_path` | `TLS_CLIENT_CA_PATH` | `certs/ca.pem` |
 
 Boolean environment variables accept only the literal values `true` and
 `false`.
@@ -95,7 +96,8 @@ between passes and must be greater than zero.
 
 Arkoor is exposed as a CDK custom outgoing method instead of being inferred
 from a BOLT11 invoice. Use method `arkoor`, put the destination Ark address in
-`request`, and provide the amount in `extra_json`:
+`request`, and provide the standard CDK custom-payment `amount`. The legacy
+`extra_json` representation remains accepted for compatibility:
 
 ```json
 {"amount_sat": 10000}
@@ -127,19 +129,36 @@ http://127.0.0.1:50051
 Configure the CDK mint to use that endpoint. Keep the processor and mint on a
 trusted network.
 
+For CDK 0.18, use a bare host without a URI scheme:
+
+```toml
+[payment_backend]
+backend = "grpcprocessor"
+unit = "sat"
+
+[grpc_processor]
+supported_units = ["sat"]
+address = "127.0.0.1"
+port = 50051
+allow_insecure = true
+```
+
+Existing mint operators must first follow the
+[CDK v0.18 migration guide](https://github.com/cashubtc/cdk/blob/main/docs/migrations/v0.18.md).
+
 ### Transport security
 
-Set `tls_enable = true` to serve gRPC over TLS. `tls_cert_path` must point to a
-PEM-encoded server certificate or certificate chain, and `tls_key_path` must
-point to its PEM-encoded private key. The process fails during startup if
-either file cannot be read or the TLS identity is invalid.
+Set `tls_enable = true` to serve gRPC over mutual TLS. `tls_cert_path` and
+`tls_key_path` configure the server identity; `tls_client_ca_path` must contain
+the CA certificate that signed the mint's `client.pem`. Configure the mint's
+`[grpc_processor].tls_dir` with `ca.pem`, `client.pem`, and `client.key`.
+The process fails during startup if any configured file cannot be read.
 
 Without TLS, startup fails unless `allow_insecure = true` (or
 `ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits cleartext
 on any bind address so it can be used in containers; startup logs a warning
 with the effective address and a stronger exposure warning for non-loopback
-binds. Configure TLS with `tls_enable = true` and
-`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
+binds. Configure mutual TLS whenever the network is not fully trusted.
 
 The process handles `SIGINT` and `SIGTERM` and stops the gRPC server
 gracefully.

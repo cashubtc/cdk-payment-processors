@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
+  4.0.0, including BOLT12 description capability advertisement and
+  scheme-free client hosts.
+- TLS mode now authenticates mint clients with `tls_client_ca_path`.
+- Updated the documented `cdk-mintd` configuration for the 0.18
+  database-authoritative payment-backend model.
+
 - Replaced the `CDK_LDK_*` environment namespace with shared `SERVER_*`,
   `TLS_*`, and `ALLOW_INSECURE` variables plus backend-specific `LDK_*`
   variables. Environment values are now applied through Figment providers,
@@ -31,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Outgoing LDK payment success and failure events are now correlated with CDK
+  melt quote IDs, allowing pending melts to finalize or compensate instead of
+  waiting indefinitely. The regtest suite also reports scenario progress and
+  bounds Cashu melt confirmation waits.
+- Unmatched outgoing LDK payment events are buffered and joined when the melt
+  quote ID is registered, instead of polling the event stream. This keeps
+  incoming payment notifications moving if a success/failure arrives before
+  `make_payment` stores its correlation keys.
 - The payment processor now fails closed without TLS unless plaintext is
   explicitly enabled with `allow_insecure`, warning more strongly when the
   effective bind address is not loopback.

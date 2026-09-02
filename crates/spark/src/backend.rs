@@ -382,7 +382,7 @@ impl SparkBackend {
                     transfer_ids: vec![],
                 })
                 .await
-                .map_err(|e| Error::Lightning(Box::new(e)))?;
+                .map_err(|e| Error::Backend(Box::new(e)))?;
             paging = result.next;
 
             if let Some(transfer) = result.items.into_iter().find(|transfer| {
@@ -411,7 +411,7 @@ impl SparkBackend {
                 transfer_ids: vec![transfer_id],
             })
             .await
-            .map_err(|e| Error::Lightning(Box::new(e)))?;
+            .map_err(|e| Error::Backend(Box::new(e)))?;
 
         Ok(result
             .items
@@ -476,7 +476,7 @@ impl MintPayment for SparkBackend {
                 false,
             )
             .await
-            .map_err(|e| Error::Lightning(Box::new(e)))?;
+            .map_err(|e| Error::Backend(Box::new(e)))?;
 
         let invoice = Bolt11Invoice::from_str(&payment.invoice)?;
         let payment_hash = invoice.payment_hash().to_byte_array();
@@ -508,7 +508,7 @@ impl MintPayment for SparkBackend {
             .wallet
             .fetch_lightning_send_fee_estimate(&bolt11, None)
             .await
-            .map_err(|e| Error::Lightning(Box::new(e)))?;
+            .map_err(|e| Error::Backend(Box::new(e)))?;
         let payment_hash = opts.bolt11.payment_hash().to_byte_array();
         self.store_melt_quote(&payment_hash, &bolt11)?;
 
@@ -549,7 +549,7 @@ impl MintPayment for SparkBackend {
                 .wallet
                 .fetch_lightning_send_payment(&payment_id)
                 .await
-                .map_err(|e| Error::Lightning(Box::new(e)))?
+                .map_err(|e| Error::Backend(Box::new(e)))?
             {
                 return Ok(Self::outgoing_response(
                     payment_identifier,
@@ -570,7 +570,7 @@ impl MintPayment for SparkBackend {
             .wallet
             .pay_lightning_invoice(&bolt11, None, max_fee_sats, false, Some(transfer_id))
             .await
-            .map_err(|e| Error::Lightning(Box::new(e)))?;
+            .map_err(|e| Error::Backend(Box::new(e)))?;
 
         let Some(payment) = result.lightning_payment else {
             tracing::warn!(
@@ -681,7 +681,7 @@ impl MintPayment for SparkBackend {
             .wallet
             .fetch_lightning_receive_payment(&payment_id)
             .await
-            .map_err(|e| Error::Lightning(Box::new(e)))?
+            .map_err(|e| Error::Backend(Box::new(e)))?
         else {
             return Ok(vec![]);
         };
@@ -779,7 +779,7 @@ impl MintPayment for SparkBackend {
             .wallet
             .fetch_lightning_send_payment(&payment_id)
             .await
-            .map_err(|e| Error::Lightning(Box::new(e)))?
+            .map_err(|e| Error::Backend(Box::new(e)))?
         else {
             return Ok(MakePaymentResponse {
                 payment_lookup_id: payment_identifier.clone(),

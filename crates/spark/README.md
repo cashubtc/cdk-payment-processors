@@ -45,6 +45,7 @@ export TLS_ENABLE="false"
 export ALLOW_INSECURE="true" # Explicit cleartext opt-in
 export TLS_CERT_PATH="certs/server.crt"
 export TLS_KEY_PATH="certs/server.key"
+export TLS_CLIENT_CA_PATH="certs/ca.pem"
 ```
 
 Boolean environment variables accept only the literal values `true` and
@@ -67,6 +68,7 @@ tls_enable = false
 allow_insecure = true # Explicit cleartext opt-in
 tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
+tls_client_ca_path = "certs/ca.pem"
 
 [backend]
 mnemonic = "your twelve or twenty four word mnemonic phrase"
@@ -120,17 +122,17 @@ schema_endpoint = "graphql/spark/rc" # optional
 These options are only available through `config.toml`, not environment
 variables.
 
-Set `tls_enable = true` to serve gRPC over TLS. `tls_cert_path` must point to a
-PEM-encoded server certificate or certificate chain, and `tls_key_path` must
-point to its PEM-encoded private key. The process fails during startup if
-either file cannot be read or the TLS identity is invalid.
+Set `tls_enable = true` to serve gRPC over mutual TLS. `tls_cert_path` and
+`tls_key_path` configure the server identity; `tls_client_ca_path` must contain
+the CA certificate that signed the mint's `client.pem`. Configure the mint's
+`[grpc_processor].tls_dir` with `ca.pem`, `client.pem`, and `client.key`.
+The process fails during startup if any configured file cannot be read.
 
 Without TLS, startup fails unless `allow_insecure = true` (or
 `ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits cleartext
 on any bind address so it can be used in containers; startup logs a warning
 with the effective address and a stronger exposure warning for non-loopback
-binds. Configure TLS with `tls_enable = true` and
-`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
+binds. Configure mutual TLS whenever the network is not fully trusted.
 
 The processor stores `quotes.db` inside `data_dir`, which defaults to
 `.data/spark`. It contains invoices together with their Spark SSP request IDs
@@ -146,6 +148,23 @@ RUST_LOG=info cargo run
 
 With TLS configured, or with the explicit insecure opt-in shown above, the
 gRPC server listens on `127.0.0.1:50051` by default.
+
+For CDK 0.18, configure the mint with a bare host without a URI scheme:
+
+```toml
+[payment_backend]
+backend = "grpcprocessor"
+unit = "sat"
+
+[grpc_processor]
+supported_units = ["sat"]
+address = "127.0.0.1"
+port = 50051
+allow_insecure = true
+```
+
+Existing mint operators must first follow the
+[CDK v0.18 migration guide](https://github.com/cashubtc/cdk/blob/main/docs/migrations/v0.18.md).
 After connecting, the processor logs the current Spark balance at `info` level.
 If the balance cannot be retrieved, it logs a warning and continues starting.
 

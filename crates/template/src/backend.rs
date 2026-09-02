@@ -147,10 +147,10 @@ impl MintPayment for TemplateBackend {
         //         }))
         //         .send()
         //         .await
-        //         .map_err(|e| cdk_common::payment::Error::Lightning(Box::new(e)))?;
+        //         .map_err(|e| cdk_common::payment::Error::Backend(Box::new(e)))?;
         //
         //     let data: YourInvoiceResponse = response.json().await
-        //         .map_err(|e| cdk_common::payment::Error::Lightning(Box::new(e)))?;
+        //         .map_err(|e| cdk_common::payment::Error::Backend(Box::new(e)))?;
         //
         //     Ok(CreateIncomingPaymentResponse {
         //         request_lookup_id: PaymentIdentifier::PaymentHash(data.payment_hash),

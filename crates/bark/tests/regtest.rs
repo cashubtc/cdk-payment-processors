@@ -346,7 +346,7 @@ impl ProcessorProcess {
             "payment processor readiness",
             Duration::from_secs(30),
             || async {
-                match PaymentProcessorClient::new("http://127.0.0.1", self.port, None).await {
+                match PaymentProcessorClient::new("127.0.0.1", self.port, None).await {
                     Ok(client) => Ok(Some(client)),
                     Err(error) => Ok::<_, anyhow::Error>({
                         tracing::debug!("payment processor not ready: {error}");
@@ -1276,6 +1276,7 @@ async fn arkoor_scenario(
     let options = OutgoingPaymentOptions::Custom(Box::new(CustomOutgoingPaymentOptions {
         method: "arkoor".to_string(),
         request: address.to_string(),
+        amount: Some(Amount::new(amount_sat, CurrencyUnit::Sat)),
         max_fee_amount: Some(Amount::new(0, CurrencyUnit::Sat)),
         timeout_secs: Some(30),
         melt_options: None,

@@ -2,8 +2,15 @@
 
 A CDK payment processor backed by an [LDK Server](https://github.com/lightningdevkit/ldk-server) node. Exposes the node to `cdk-mintd` over the CDK payment processor gRPC protocol, with BOLT11 and BOLT12 (offers) support.
 
+The processor correlates outgoing LDK payment events with CDK melt quote IDs.
+When a payment initially returns as pending, a later success event finalizes
+the melt and a permanent failure event allows CDK to compensate it. Terminal
+events that arrive before the quote ID is known are buffered briefly and
+replayed when `make_payment` registers the payment, so the event stream never
+sleeps waiting for correlation.
+
 ```text
-cdk-mintd (ln_backend = "grpcprocessor")
+cdk-mintd (payment_backend = "grpcprocessor")
   -> gRPC        cdk-payment-processor-ldk-server (this crate)
   -> gRPC+TLS    ldk-server
 ```
@@ -18,13 +25,21 @@ cargo run --release
 Point `cdk-mintd` at the processor:
 
 ```toml
-[ln]
-ln_backend = "grpcprocessor"
+[payment_backend]
+backend = "grpcprocessor"
+unit = "msat"
 
 [grpc_processor]
-addr = "http://127.0.0.1"
+supported_units = ["msat"]
+address = "127.0.0.1"
 port = 50051
+allow_insecure = true
 ```
+
+CDK 0.18 chooses the URI scheme from `tls_dir`, so `address` must not contain
+`http://` or `https://`. Existing mint operators must migrate and initialize
+their database-backed configuration before starting 0.18; follow the
+[CDK v0.18 migration guide](https://github.com/cashubtc/cdk/blob/main/docs/migrations/v0.18.md).
 
 ## Configuration
 
@@ -40,6 +55,7 @@ values.
 | `allow_insecure` | `ALLOW_INSECURE` | `false` |
 | `tls_cert_path` | `TLS_CERT_PATH` | `certs/server.crt` |
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
+| `tls_client_ca_path` | `TLS_CLIENT_CA_PATH` | `certs/ca.pem` |
 | `backend.address` | `LDK_ADDRESS` | Required |
 | `backend.api_key` | `LDK_API_KEY` | Required |
 | `backend.tls_cert_path` | `LDK_TLS_CERT_PATH` | Required |
@@ -50,12 +66,17 @@ values.
 Boolean environment variables accept only the literal values `true` and
 `false`.
 
+With TLS enabled, `tls_client_ca_path` must contain the CA certificate that
+signed the mint's `client.pem`; clients without a trusted certificate are
+rejected. Configure the mint's `[grpc_processor].tls_dir` with `ca.pem`,
+`client.pem`, and `client.key`.
+
 Without TLS, startup fails unless `allow_insecure = true` (or
 `ALLOW_INSECURE=true`) is explicitly configured. The opt-in permits
 cleartext on any bind address so it can be used in containers; startup logs a
 warning with the effective address and a stronger exposure warning for
-non-loopback binds. Configure TLS with `tls_enable = true` and
-`tls_cert_path`/`tls_key_path` whenever the network is not fully trusted.
+non-loopback binds. Configure mutual TLS whenever the network is not fully
+trusted.
 
 ## Startup self-check
 
@@ -71,7 +92,9 @@ processor binary against two live `ldk-server` daemons (a payer node funding a
 channel to the mint-side node) on a regtest `bitcoind`. It covers BOLT11 and
 BOLT12 receive/send, quote fee math, held-HTLC pending/failed semantics,
 invoice expiry, processor restarts, event streaming, and a full Cashu
-mint/melt round trip.
+mint/melt round trip. It prints progress between scenario groups and applies a
+timeout to Cashu melt confirmation so event-delivery regressions fail with a
+clear error instead of waiting indefinitely.
 
 ```bash
 just test-regtest

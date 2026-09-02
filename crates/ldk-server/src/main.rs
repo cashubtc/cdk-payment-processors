@@ -15,11 +15,12 @@ use cdk_payment_processor::{
 use cdk_payment_processor_ldk_server::backend::{Config as BackendConfig, LdkServerBackend};
 use cdk_payment_processor_ldk_server::settings::Config;
 use tokio::signal;
-use tonic::transport::{Identity, Server, ServerTlsConfig};
+use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tracing_subscriber::EnvFilter;
 
-const INSECURE_GUIDANCE: &str = "configure TLS with tls_enable = true and \
-    tls_cert_path/tls_key_path, or set allow_insecure = true to accept cleartext traffic";
+const INSECURE_GUIDANCE: &str = "configure mTLS with tls_enable = true and \
+    tls_cert_path/tls_key_path/tls_client_ca_path, or set allow_insecure = true to accept \
+    cleartext traffic";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -102,7 +103,7 @@ async fn main() -> Result<()> {
 
 /// Verify our own gRPC service answers GetSettings from the local host.
 async fn self_check(socket_addr: SocketAddr) -> Result<()> {
-    // cdk-payment-processor 0.17.3 client does not prepend a scheme.
+    // cdk-payment-processor 0.18 chooses the scheme from the TLS configuration.
     let endpoint = self_check_endpoint(socket_addr);
     let port = socket_addr.port();
     for attempt in 1..=10u8 {
@@ -148,8 +149,8 @@ fn self_check_endpoint(socket_addr: SocketAddr) -> String {
         ip => ip,
     };
     match check_ip {
-        IpAddr::V4(ip) => format!("http://{ip}"),
-        IpAddr::V6(ip) => format!("http://[{ip}]"),
+        IpAddr::V4(ip) => ip.to_string(),
+        IpAddr::V6(ip) => format!("[{ip}]"),
     }
 }
 
@@ -179,13 +180,22 @@ fn grpc_server_builder(cfg: &Config, socket_addr: SocketAddr) -> Result<Server> 
         .with_context(|| format!("failed to read TLS certificate `{}`", cfg.tls_cert_path))?;
     let private_key = fs::read(&cfg.tls_key_path)
         .with_context(|| format!("failed to read TLS private key `{}`", cfg.tls_key_path))?;
+    let client_ca = fs::read(&cfg.tls_client_ca_path).with_context(|| {
+        format!(
+            "failed to read TLS client CA certificate `{}`",
+            cfg.tls_client_ca_path
+        )
+    })?;
     let identity = Identity::from_pem(certificate, private_key);
-    let tls_config = ServerTlsConfig::new().identity(identity);
+    let tls_config = ServerTlsConfig::new()
+        .identity(identity)
+        .client_ca_root(Certificate::from_pem(client_ca));
 
     tracing::info!(
         certificate = %cfg.tls_cert_path,
         private_key = %cfg.tls_key_path,
-        "TLS is enabled"
+        client_ca = %cfg.tls_client_ca_path,
+        "mutual TLS is enabled"
     );
 
     server
@@ -263,11 +273,8 @@ mod tests {
     fn self_check_uses_loopback_for_unspecified_docker_bind() {
         assert_eq!(
             self_check_endpoint("0.0.0.0:50051".parse().unwrap()),
-            "http://127.0.0.1"
+            "127.0.0.1"
         );
-        assert_eq!(
-            self_check_endpoint("[::]:50051".parse().unwrap()),
-            "http://[::1]"
-        );
+        assert_eq!(self_check_endpoint("[::]:50051".parse().unwrap()), "[::1]");
     }
 }

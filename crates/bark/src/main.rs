@@ -11,11 +11,12 @@ use std::{
     sync::Arc,
 };
 use tokio::signal;
-use tonic::transport::{Identity, Server, ServerTlsConfig};
+use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tracing_subscriber::EnvFilter;
 
-const INSECURE_GUIDANCE: &str = "configure TLS with tls_enable = true and \
-    tls_cert_path/tls_key_path, or set allow_insecure = true to accept cleartext traffic";
+const INSECURE_GUIDANCE: &str = "configure mTLS with tls_enable = true and \
+    tls_cert_path/tls_key_path/tls_client_ca_path, or set allow_insecure = true to accept \
+    cleartext traffic";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -93,13 +94,22 @@ fn grpc_server_builder(cfg: &Config, socket_addr: SocketAddr) -> Result<Server> 
         .with_context(|| format!("failed to read TLS certificate `{}`", cfg.tls_cert_path))?;
     let private_key = fs::read(&cfg.tls_key_path)
         .with_context(|| format!("failed to read TLS private key `{}`", cfg.tls_key_path))?;
+    let client_ca = fs::read(&cfg.tls_client_ca_path).with_context(|| {
+        format!(
+            "failed to read TLS client CA certificate `{}`",
+            cfg.tls_client_ca_path
+        )
+    })?;
     let identity = Identity::from_pem(certificate, private_key);
-    let tls_config = ServerTlsConfig::new().identity(identity);
+    let tls_config = ServerTlsConfig::new()
+        .identity(identity)
+        .client_ca_root(Certificate::from_pem(client_ca));
 
     tracing::info!(
         certificate = %cfg.tls_cert_path,
         private_key = %cfg.tls_key_path,
-        "TLS is enabled"
+        client_ca = %cfg.tls_client_ca_path,
+        "mutual TLS is enabled"
     );
 
     server
