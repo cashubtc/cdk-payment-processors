@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `backend.payment_methods` (`LDK_PAYMENT_METHODS`) to restrict which payment
+  methods the processor advertises, so it can run alongside another payment
+  backend instead of claiming every rail. Defaults to advertising everything.
+
 - A crate-local `Cargo.lock` and locked development commands for reproducible
   standalone builds.
 - An opt-in regtest integration suite (`--features regtest-tests`,
@@ -38,6 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Updated the opt-in regtest backend configuration for the advertised payment
+  methods setting.
 - Outgoing LDK payment success and failure events are now correlated with CDK
   melt quote IDs, allowing pending melts to finalize or compensate instead of
   waiting indefinitely. The regtest suite also reports scenario progress and
