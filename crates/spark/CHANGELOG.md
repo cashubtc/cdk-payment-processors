@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Renamed the backend-specific `config.toml` section from `[backend]` to
   `[spark]`.
-- Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
+- Updated the CDK integration to `0.18.0` and payment-processor protocol
   4.0.0, including the payment-backend error naming and scheme-free client
   hosts.
 - TLS mode now authenticates mint clients with `tls_client_ca_path`.
