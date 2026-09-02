@@ -220,8 +220,6 @@ root. Because Lightning swaps require Lightspark's hosted SSP, which cannot
 serve a local federation, payment settlement is covered by the failure-path
 scenarios rather than live swaps.
 
-See `CONTRIBUTING.md` for contribution guidelines.
-
 ## Resources
 
 - [Spark documentation](https://docs.spark.money/)

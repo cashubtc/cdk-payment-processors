@@ -3,6 +3,9 @@
 A collection of self-contained Cargo projects implementing CDK Payment
 Processors (`MintPayment` interface over gRPC).
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for repository-wide development and
+contribution guidelines.
+
 | Processor | Unit | BOLT11 | BOLT12 | On-chain | Custom |
 | --- | --- | --- | --- | --- | --- |
 | [Bark](crates/bark/README.md) | `sat` | ✅ | ❌ | ✅ | `arkoor` |
