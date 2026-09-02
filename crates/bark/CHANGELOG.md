@@ -47,7 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Renamed the backend-specific `config.toml` section from `[backend]` to
   `[bark]`.
-- Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
+- Updated the CDK integration to `0.18.0` and payment-processor protocol
   4.0.0, including typed custom-payment amounts and scheme-free client hosts.
 - Arkoor quotes persist the resolved amount by quote ID and retain
   `extra_json.amount_sat` as a compatibility fallback.

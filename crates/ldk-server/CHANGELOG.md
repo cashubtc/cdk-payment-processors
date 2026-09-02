@@ -30,7 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Renamed the backend-specific `config.toml` section from `[backend]` to
   `[ldk]`.
-- Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
+- Updated the CDK integration to `0.18.0` and payment-processor protocol
   4.0.0, including BOLT12 description capability advertisement and
   scheme-free client hosts.
 - TLS mode now authenticates mint clients with `tls_client_ca_path`.
