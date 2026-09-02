@@ -259,6 +259,7 @@ template environment-variable prefix with one for your backend:
 
 ```rust
 const BACKEND_ENV_PREFIX: &str = "BLINK_";
+const BACKEND_CONFIG_SECTION: &str = "blink";
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct BackendConfig {
@@ -269,15 +270,16 @@ pub struct BackendConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
     #[serde(default)]
-    pub backend: BackendConfig,
+    pub blink: BackendConfig,
 
     // Existing gRPC server configuration...
 }
 ```
 
-The existing Figment provider maps each prefixed variable to a field under
-`backend`, so `BLINK_API_URL` becomes `backend.api_url` without additional
-loading code.
+The existing Figment provider maps each prefixed variable into the matching
+backend-specific section, so `BLINK_API_URL` becomes `blink.api_url` without
+additional loading code. When adapting the template, rename both the section
+constant and the corresponding `Config` field.
 
 #### 6. Initialize Your Backend in main.rs
 
@@ -293,7 +295,7 @@ async fn main() -> Result<()> {
     let cfg = settings::Config::from_env()?;
 
     // Initialize your backend
-    let backend = BlinkBackend::new(&cfg.backend).await?;
+    let backend = BlinkBackend::new(&cfg.blink).await?;
 
     // Test connection
     backend.test_connection().await?;
@@ -352,8 +354,9 @@ The template provides these base configuration options:
 
 The example backend fields are available as `TEMPLATE_API_URL` and
 `TEMPLATE_API_KEY`. Change `BACKEND_ENV_PREFIX` when adapting the template;
-fields are converted from uppercase snake case to the matching field under
-`backend`. Boolean environment variables accept only the literal values
+also change `BACKEND_CONFIG_SECTION` and the corresponding `Config` field.
+Fields are converted from uppercase snake case to the matching field under
+`template`. Boolean environment variables accept only the literal values
 `true` and `false`.
 
 ### config.toml
@@ -370,7 +373,7 @@ tls_key_path = "certs/server.key"
 tls_client_ca_path = "certs/ca.pem"
 
 # Add your backend configuration
-[backend]
+[template]
 api_url = "https://api.blink.sv/graphql"
 api_key = "your-key-here"
 ```

@@ -12,7 +12,7 @@ tls_key_path = "certs/server.key"
 tls_client_ca_path = "certs/ca.pem"
 
 # LDK Server node connection
-[backend]
+[ldk]
 # gRPC address of the LDK Server node, without scheme
 address = "127.0.0.1:3536"
 # HMAC API key (64-char hex)

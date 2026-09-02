@@ -11,12 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A crate-local `Cargo.lock` and locked development commands for reproducible
   standalone builds.
 - Direct Spark operator and SSP integration through the low-level `spark-wallet` crate
-- Selectable Spark network through `backend.network` / `SPARK_NETWORK`
+- Selectable Spark network through `spark.network` / `SPARK_NETWORK`
   (mainnet, regtest, testnet, signet; defaults to mainnet)
-- Custom operator federation support through `backend.operators` with
+- Custom operator federation support through `spark.operators` with
   per-operator address, FROST identifier, identity public key, and optional
-  CA certificate path, plus a configurable `backend.split_secret_threshold`
-- Custom Spark Service Provider (SSP) override through `backend.ssp`
+  CA certificate path, plus a configurable `spark.split_secret_threshold`
+- Custom Spark Service Provider (SSP) override through `spark.ssp`
 - An opt-in regtest suite (`--features regtest-tests`, `just test-regtest`)
   that spins up a local Spark federation (regtest bitcoind plus three
   `spark-so` operators with pre-seeded keyshares) through the upstream
@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backend configuration structure matching config.toml
 
 ### Changed
+- Renamed the backend-specific `config.toml` section from `[backend]` to
+  `[spark]`.
 - Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
   4.0.0, including the payment-backend error naming and scheme-free client
   hosts.

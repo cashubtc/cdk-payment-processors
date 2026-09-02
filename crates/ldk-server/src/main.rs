@@ -37,23 +37,23 @@ async fn main() -> Result<()> {
     );
     let mut server_builder = grpc_server_builder(&cfg, socket_addr)?;
 
-    let cert_pem = fs::read(&cfg.backend.tls_cert_path).with_context(|| {
+    let cert_pem = fs::read(&cfg.ldk.tls_cert_path).with_context(|| {
         format!(
             "failed to read LDK Server TLS certificate {}",
-            cfg.backend.tls_cert_path
+            cfg.ldk.tls_cert_path
         )
     })?;
 
     let backend_cfg = BackendConfig {
-        address: cfg.backend.address.clone(),
-        api_key: cfg.backend.api_key.clone(),
+        address: cfg.ldk.address.clone(),
+        api_key: cfg.ldk.api_key.clone(),
         cert_pem,
         fee_reserve: FeeReserve {
-            min_fee_reserve: Amount::from(cfg.backend.fee_reserve_min_sat),
-            percent_fee_reserve: cfg.backend.fee_reserve_percent,
+            min_fee_reserve: Amount::from(cfg.ldk.fee_reserve_min_sat),
+            percent_fee_reserve: cfg.ldk.fee_reserve_percent,
         },
-        max_payment_scan_pages: cfg.backend.max_payment_scan_pages,
-        advertised_methods: cfg.backend.advertised_methods()?,
+        max_payment_scan_pages: cfg.ldk.max_payment_scan_pages,
+        advertised_methods: cfg.ldk.advertised_methods()?,
     };
     let backend = Arc::new(LdkServerBackend::new(backend_cfg)?);
 
@@ -63,7 +63,7 @@ async fn main() -> Result<()> {
         scheme,
         cfg.address,
         cfg.port,
-        cfg.backend.address
+        cfg.ldk.address
     );
 
     let payment_processor = PaymentProcessorService::new(backend, cfg.address.as_str(), cfg.port)?;

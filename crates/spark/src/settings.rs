@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use spark_wallet::Network;
 
 const BACKEND_ENV_PREFIX: &str = "SPARK_";
+const BACKEND_CONFIG_SECTION: &str = "spark";
 
 /// A single Spark operator in a custom federation
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -116,9 +117,9 @@ impl BackendConfig {
 /// Environment variables take precedence over file configuration.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Config {
-    /// Backend-specific configuration
+    /// Spark-specific configuration
     #[serde(default)]
-    pub backend: BackendConfig,
+    pub spark: BackendConfig,
 
     /// gRPC server address
     #[serde(default = "default_address")]
@@ -166,7 +167,7 @@ fn default_tls_client_ca_path() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            backend: BackendConfig::default(),
+            spark: BackendConfig::default(),
             address: default_address(),
             port: default_port(),
             tls_enable: false,
@@ -201,7 +202,8 @@ fn config_figment() -> Figment {
         .merge(Env::prefixed("TLS_").map(|key| format!("tls_{}", key.as_str()).into()))
         .merge(Env::raw().only(&["ALLOW_INSECURE"]))
         .merge(
-            Env::prefixed(BACKEND_ENV_PREFIX).map(|key| format!("backend.{}", key.as_str()).into()),
+            Env::prefixed(BACKEND_ENV_PREFIX)
+                .map(|key| format!("{BACKEND_CONFIG_SECTION}.{}", key.as_str()).into()),
         )
 }
 

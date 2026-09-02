@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `backend.payment_methods` (`LDK_PAYMENT_METHODS`) to restrict which payment
+- `ldk.payment_methods` (`LDK_PAYMENT_METHODS`) to restrict which payment
   methods the processor advertises, so it can run alongside another payment
   backend instead of claiming every rail. Defaults to advertising everything.
 
@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Renamed the backend-specific `config.toml` section from `[backend]` to
+  `[ldk]`.
 - Updated the CDK integration to `0.18.0-rc.3` and payment-processor protocol
   4.0.0, including BOLT12 description capability advertisement and
   scheme-free client hosts.

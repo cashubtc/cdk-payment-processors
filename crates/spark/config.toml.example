@@ -12,7 +12,7 @@ tls_key_path = "certs/server.key"
 tls_client_ca_path = "certs/ca.pem"
 
 # Spark backend configuration
-[backend]
+[spark]
 # BIP39 mnemonic - REQUIRED
 # Generate with: cargo install bip39-cli && bip39 generate 12
 mnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
@@ -31,20 +31,20 @@ data_dir = ".data/spark"
 # (e.g. regtest). Operators are indexed by position (id 0, 1, ...).
 # split_secret_threshold = 2
 #
-# [[backend.operators]]
+# [[spark.operators]]
 # address = "https://127.0.0.1:8535"
 # identifier = "0000000000000000000000000000000000000000000000000000000000000001"
 # identity_public_key = "03dfbdff4b6332c220f8fa2ba8ed496c698ceada563fa01b67d9983bfc5c95e763"
 # ca_cert_path = "certs/operator-0-ca.pem"
 #
-# [[backend.operators]]
+# [[spark.operators]]
 # address = "https://127.0.0.1:8536"
 # identifier = "0000000000000000000000000000000000000000000000000000000000000002"
 # identity_public_key = "03e625e9768651c9be268e287245cc33f96a68ce9141b0b4769205db027ee8ed77"
 # ca_cert_path = "certs/operator-1-ca.pem"
 
 # Optional: use a custom Spark Service Provider (SSP) for Lightning swaps.
-# [backend.ssp]
+# [spark.ssp]
 # base_url = "https://localhost:8100"
 # identity_public_key = "022bf283544b16c0622daecb79422007d167eca6ce9f0c98c0c49833b1f7170bfe"
 # schema_endpoint = "graphql/spark/rc"

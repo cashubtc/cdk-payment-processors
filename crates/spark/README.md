@@ -52,7 +52,7 @@ Boolean environment variables accept only the literal values `true` and
 `false`.
 
 A mnemonic is required, either through `SPARK_MNEMONIC` or the
-`backend.mnemonic` configuration value. Keep it secret: it controls the Spark
+`spark.mnemonic` configuration value. Keep it secret: it controls the Spark
 wallet.
 
 ### Configuration file
@@ -70,7 +70,7 @@ tls_cert_path = "certs/server.crt"
 tls_key_path = "certs/server.key"
 tls_client_ca_path = "certs/ca.pem"
 
-[backend]
+[spark]
 mnemonic = "your twelve or twenty four word mnemonic phrase"
 network = "mainnet" # one of mainnet, regtest, testnet, signet
 data_dir = ".data/spark"
@@ -84,26 +84,26 @@ running your own Spark operator federation and pointing the wallet at it.
 
 By default the wallet connects to the public operators and SSP for the
 selected network. To connect to your own deployment instead, set
-`backend.operators` (and optionally `backend.ssp`) in `config.toml`:
+`spark.operators` (and optionally `spark.ssp`) in `config.toml`:
 
 ```toml
-[backend]
+[spark]
 mnemonic = "..."
 network = "regtest"
 split_secret_threshold = 2
 
-[[backend.operators]]
+[[spark.operators]]
 address = "https://127.0.0.1:8535"
 identifier = "0000000000000000000000000000000000000000000000000000000000000001"
 identity_public_key = "03dfbdff4b6332c220f8fa2ba8ed496c698ceada563fa01b67d9983bfc5c95e763"
 ca_cert_path = "certs/operator-0-ca.pem"
 
-[[backend.operators]]
+[[spark.operators]]
 address = "https://127.0.0.1:8536"
 identifier = "0000000000000000000000000000000000000000000000000000000000000002"
 identity_public_key = "03e625e9768651c9be268e287245cc33f96a68ce9141b0b4769205db027ee8ed77"
 
-[backend.ssp]
+[spark.ssp]
 base_url = "https://localhost:8100"
 identity_public_key = "022bf283544b16c0622daecb79422007d167eca6ce9f0c98c0c49833b1f7170bfe"
 schema_endpoint = "graphql/spark/rc" # optional
@@ -116,7 +116,7 @@ schema_endpoint = "graphql/spark/rc" # optional
   `identity_public_key` its 33-byte compressed public key in hex.
 - `ca_cert_path` points to a PEM CA certificate used to verify the operator's
   TLS connection; omit it for publicly trusted certificates.
-- Omitting `[backend.ssp]` keeps the default SSP; a custom SSP needs its base
+- Omitting `[spark.ssp]` keeps the default SSP; a custom SSP needs its base
   URL and identity public key.
 
 These options are only available through `config.toml`, not environment
