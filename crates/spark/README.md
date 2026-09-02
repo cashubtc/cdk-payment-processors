@@ -230,4 +230,6 @@ See `CONTRIBUTING.md` for contribution guidelines.
 
 ## License
 
-MIT License. See `LICENSE`.
+Dual-licensed under the [MIT License](LICENSE-MIT) or the
+[Apache License 2.0](LICENSE-APACHE), at your option. See
+[LICENSE.md](LICENSE.md).

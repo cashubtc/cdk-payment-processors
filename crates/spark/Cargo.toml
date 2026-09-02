@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2021"
 authors = ["thesimplekid <tsk@thesimplekid.com>"]
 description = "CDK Payment Processor backed by a Spark wallet"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [features]
 default = []

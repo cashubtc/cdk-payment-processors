@@ -135,7 +135,7 @@ cargo clippy
 ```
 src/
 ├── backend.rs     # Backend implementation
-├── database.rs    # Quote database for payment mappings
+├── error.rs       # Backend error types
 ├── lib.rs         # Library exports
 ├── settings.rs    # Configuration management
 └── main.rs        # Server entry point

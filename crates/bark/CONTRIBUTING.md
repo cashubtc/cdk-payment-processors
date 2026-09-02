@@ -134,9 +134,10 @@ cargo clippy
 
 ```
 src/
-├── template_backend.rs  # Template backend implementation
-├── settings.rs         # Configuration management
-└── main.rs            # Server entry point
+├── backend.rs     # Backend implementation
+├── lib.rs         # Library exports
+├── settings.rs    # Configuration management
+└── main.rs        # Server entry point
 ```
 
 ## Testing
@@ -197,7 +198,8 @@ chore: update cdk-common to 0.14.0
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be dual-licensed under
+the MIT License or Apache License 2.0, at the user's option.
 
 ## Questions?
 

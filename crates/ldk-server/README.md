@@ -148,3 +148,9 @@ the root.
 
 - Depends on `ldk-server-client` via a git rev; this crate is a binary and is not published to crates.io.
 - Battle-tested in production on the Hedwig mint (BOLT11 mint/melt, BOLT12 mint quotes, mainnet). Originally developed at [vincenzopalazzo/cdk-ldk-server-processor](https://github.com/vincenzopalazzo/cdk-ldk-server-processor).
+
+## License
+
+Dual-licensed under the [MIT License](LICENSE-MIT) or the
+[Apache License 2.0](LICENSE-APACHE), at your option. See
+[LICENSE.md](LICENSE.md).

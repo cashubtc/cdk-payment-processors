@@ -587,7 +587,9 @@ Contributions welcome! Please:
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
+Dual-licensed under the [MIT License](LICENSE-MIT) or the
+[Apache License 2.0](LICENSE-APACHE), at your option. See
+[LICENSE.md](LICENSE.md).
 
 ## FAQ
 

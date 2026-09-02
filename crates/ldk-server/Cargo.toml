@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Vincenzo Palazzo <vincenzopalazzodev@gmail.com>"]
 description = "CDK Payment Processor backed by an LDK Server node"
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [features]
 default = []
