@@ -1294,6 +1294,11 @@ async fn arkoor_scenario(
         quote.extra_json,
         Some(serde_json::json!({"routing": "arkoor"}))
     );
+    let unpaid = backend
+        .check_outgoing_payment(&PaymentIdentifier::QuoteId(quote_id.clone()))
+        .await?;
+    assert_eq!(unpaid.status, MeltQuoteState::Unpaid);
+    assert_eq!(unpaid.total_spent.to_u64(), 0);
 
     let paid = backend
         .make_payment(&CurrencyUnit::Sat, options.clone())

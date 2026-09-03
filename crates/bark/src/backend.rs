@@ -3185,6 +3185,14 @@ impl MintPayment for BarkBackend {
                     return self.arkoor_send_response(&send, true);
                 }
             }
+            if self.state_store.get_arkoor_quote(&quote_id_str)?.is_some() {
+                return Ok(MakePaymentResponse {
+                    payment_lookup_id: PaymentIdentifier::QuoteId(quote_id.clone()),
+                    payment_proof: None,
+                    status: MeltQuoteState::Unpaid,
+                    total_spent: Amount::new(0, CurrencyUnit::Sat),
+                });
+            }
 
             match self.state_store.lightning_send_for_quote(&quote_id_str) {
                 Ok(Some((payment_hash, _))) => {
