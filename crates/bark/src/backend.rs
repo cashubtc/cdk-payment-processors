@@ -305,6 +305,7 @@ impl BarkStateStore {
             tx.open_table(LIGHTNING_SEND_INTENTS_TABLE)?;
             tx.open_table(COMPLETED_LIGHTNING_SENDS_TABLE)?;
             tx.open_table(ARKOOR_SEND_INTENTS_TABLE)?;
+            tx.open_table(ARKOOR_QUOTES_TABLE)?;
             tx.open_table(COMPLETED_ARKOOR_SENDS_TABLE)?;
             tx.open_table(SCAN_CURSOR_TABLE)?;
         }
@@ -3711,6 +3712,23 @@ mod tests {
             Some("last-key")
         );
         drop(reopened);
+        std::fs::remove_file(path).expect("remove test state store");
+    }
+
+    #[test]
+    fn fresh_state_store_has_empty_arkoor_quotes() {
+        let path = std::env::temp_dir().join(format!(
+            "bark-empty-arkoor-quotes-{}.redb",
+            uuid::Uuid::new_v4()
+        ));
+        let store = BarkStateStore::open(path.clone()).expect("open state store");
+
+        assert!(store
+            .get_arkoor_quote(&QuoteId::new().to_string())
+            .expect("read empty arkoor quotes")
+            .is_none());
+
+        drop(store);
         std::fs::remove_file(path).expect("remove test state store");
     }
 
