@@ -2163,17 +2163,21 @@ impl BarkBackend {
                 let extra: serde_json::Value = serde_json::from_str(extra_json).map_err(|e| {
                     cdk_common::payment::Error::Custom(format!("Invalid arkoor extra_json: {e}"))
                 })?;
-                extra
-                    .get("amount_sat")
-                    .and_then(serde_json::Value::as_u64)
+                let Some(amount) = extra.get("amount_sat") else {
+                    return Ok(None);
+                };
+                amount
+                    .as_u64()
                     .filter(|amount| *amount > 0)
+                    .map(Some)
                     .ok_or_else(|| {
                         cdk_common::payment::Error::Custom(
                             "Arkoor extra_json.amount_sat must be a positive integer".to_string(),
                         )
                     })
             })
-            .transpose()?;
+            .transpose()?
+            .flatten();
 
         let candidates = [typed_amount_sat, extra_amount_sat, quoted_amount_sat];
         let amount_sat = candidates.into_iter().flatten().next().ok_or_else(|| {
@@ -3530,6 +3534,18 @@ mod tests {
             BarkBackend::parse_arkoor_request(
                 ARKOOR_PAYMENT_METHOD,
                 address,
+                Some(&typed_amount),
+                Some(r#"{"routing":"arkoor"}"#),
+                None,
+            )
+            .expect("typed amount with quote response metadata")
+            .1,
+            2_345
+        );
+        assert_eq!(
+            BarkBackend::parse_arkoor_request(
+                ARKOOR_PAYMENT_METHOD,
+                address,
                 None,
                 None,
                 Some(3_456),
@@ -3572,7 +3588,6 @@ mod tests {
             Some(r#"{"amount_sat":0}"#),
             Some(r#"{"amount_sat":-1}"#),
             Some(r#"{"amount_sat":"1"}"#),
-            Some(r#"{}"#),
         ] {
             assert!(BarkBackend::parse_arkoor_request(
                 ARKOOR_PAYMENT_METHOD,
@@ -3583,6 +3598,14 @@ mod tests {
             )
             .is_err());
         }
+        assert!(BarkBackend::parse_arkoor_request(
+            ARKOOR_PAYMENT_METHOD,
+            address,
+            None,
+            Some(r#"{}"#),
+            None,
+        )
+        .is_err());
         assert!(BarkBackend::parse_arkoor_request(
             ARKOOR_PAYMENT_METHOD,
             "not-an-ark-address",
