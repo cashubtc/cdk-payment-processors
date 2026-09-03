@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Arkoor quote requests accept metadata without `amount_sat` when the typed
+  request amount is supplied.
+- Stored arkoor quotes without a payment attempt are reported as unpaid instead
+  of missing.
+- Opening a new state store initializes arkoor quote storage, preventing lookup
+  errors before the table is created.
+
 ## [0.1.0] - 2026-09-02
 
 ### Added
