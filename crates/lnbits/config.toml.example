@@ -1,0 +1,26 @@
+# Copy this file to config.toml and fill in your values.
+
+# gRPC server configuration
+address = "127.0.0.1"
+port = 50051
+
+# TLS is required unless plaintext is explicitly allowed.
+tls_enable = false
+allow_insecure = true
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+tls_client_ca_path = "certs/ca.pem"
+
+# LNbits wallet connection
+[lnbits]
+# Find both keys under the wallet's API Info page.
+admin_api_key = "your-admin-api-key"
+invoice_api_key = "your-invoice-read-api-key"
+
+# The LNbits instance root is preferred. A URL ending in /api/v1 is accepted
+# as well and normalized automatically.
+api_url = "https://lnbits.example.com/"
+
+# Melt quote fee reserve: max(minimum, payment amount * percentage).
+fee_reserve_min_sat = 2
+fee_reserve_percent = 0.02

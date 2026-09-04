@@ -10,6 +10,7 @@ contribution guidelines.
 | --- | --- | --- | --- | --- | --- |
 | [Bark](crates/bark/README.md) | `sat` | ✅ | ❌ | ✅ | `arkoor` |
 | [LDK Server](crates/ldk-server/README.md) | `msat` | ✅ | ✅ | ❌ | - |
+| [LNbits](crates/lnbits/README.md) | `sat` | ✅ | ❌ | ❌ | - |
 | [Spark](crates/spark/README.md) | `sat` | ✅ | ❌ | ❌ | - |
 | [Template](crates/template/README.md) | `sat` | ✅ | ❌ | ❌ | - |
 
@@ -19,6 +20,7 @@ BOLT11 features:
 | --- | --- | --- | --- |
 | [Bark](crates/bark/README.md) | ❌ | ❌ | ✅ |
 | [LDK Server](crates/ldk-server/README.md) | ✅ | ❌ | ✅ |
+| [LNbits](crates/lnbits/README.md) | ❌ | ❌ | ✅ |
 | [Spark](crates/spark/README.md) | ❌ | ❌ | ❌ |
 | [Template](crates/template/README.md) | ❌ | ❌ | ✅ |
 
@@ -28,6 +30,7 @@ BOLT11 features:
 crates/
 ├── bark/        # Payment processor backed by a Bark wallet
 ├── ldk-server/  # Payment processor backed by an LDK Server node
+├── lnbits/      # Payment processor backed by an LNbits wallet
 ├── spark/       # Payment processor backed by a Spark wallet
 └── template/    # Starting point for integrating a new payment backend
 ```

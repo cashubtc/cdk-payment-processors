@@ -22,6 +22,7 @@ Rust version. Identify the affected processor or processors.
 crates/
 ├── bark/        # Bark-backed payment processor
 ├── ldk-server/  # LDK Server-backed payment processor
+├── lnbits/      # LNbits-backed payment processor
 ├── spark/       # Spark-backed payment processor
 └── template/    # Backend-agnostic starting point for a new processor
 ```

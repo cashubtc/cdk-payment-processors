@@ -1,0 +1,28 @@
+# CDK Payment Processor for LNbits
+
+default:
+    @just --list
+
+check:
+    cargo check --locked
+
+build:
+    cargo build --locked
+
+run:
+    cargo run --locked
+
+test:
+    cargo test --locked
+
+lint:
+    cargo clippy --locked --all-targets -- -D warnings
+
+fmt:
+    cargo fmt
+
+fmt-check:
+    cargo fmt -- --check
+
+ci: fmt-check check test lint
+    @echo "All checks passed!"

@@ -28,7 +28,7 @@ jobs:
       - name: Select all crates
         id: all
         if: github.event_name == 'push'
-        run: echo 'crates=["bark","ldk-server","spark","template"]' >> "$GITHUB_OUTPUT"
+        run: echo 'crates=["bark","ldk-server","lnbits","spark","template"]' >> "$GITHUB_OUTPUT"
 
       - name: Detect changed crates
         id: filter
@@ -42,6 +42,9 @@ jobs:
               - '.github/workflows/ci.yml'
             ldk-server:
               - 'crates/ldk-server/**'
+              - '.github/workflows/ci.yml'
+            lnbits:
+              - 'crates/lnbits/**'
               - '.github/workflows/ci.yml'
             spark:
               - 'crates/spark/**'
