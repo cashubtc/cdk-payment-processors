@@ -476,6 +476,7 @@ dependencies = [
  "figment",
  "futures",
  "lnbits-rs",
+ "reqwest",
  "rustls",
  "serde",
  "serde_json",

@@ -15,6 +15,10 @@ run:
 test:
     cargo test --locked
 
+# Run the opt-in LNbits Regtest suite
+test-regtest:
+    CARGO_INCREMENTAL=0 RUST_LOG=info cargo test --locked --features regtest-tests --test regtest -- --ignored --nocapture --test-threads=1
+
 lint:
     cargo clippy --locked --all-targets -- -D warnings
 

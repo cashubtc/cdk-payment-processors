@@ -6,6 +6,10 @@ authors = ["CDK Developers"]
 description = "CDK Payment Processor backed by an LNbits wallet"
 license = "MIT OR Apache-2.0"
 
+[features]
+default = []
+regtest-tests = ["dep:reqwest", "tokio/process"]
+
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
@@ -22,8 +26,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 # lnbits deps
 futures = "0.3"
 lnbits-rs = "0.9.2"
+reqwest = { version = "0.12", default-features = false, features = ["json"], optional = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 thiserror = "2"
 
 [dev-dependencies]
 serde_json = "1"
+
+[[test]]
+name = "regtest"
+path = "tests/regtest.rs"
+required-features = ["regtest-tests"]

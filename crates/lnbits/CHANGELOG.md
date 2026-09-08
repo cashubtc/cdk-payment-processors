@@ -15,5 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   settlement notifications with bounded reconnect backoff.
 - TOML and environment configuration, configurable melt fee reserves, an
   mTLS-by-default gRPC server, unit tests, and crate-local development commands.
+- An opt-in Docker-backed regtest suite (`--features regtest-tests`,
+  `just test-regtest`) using Bitcoin Core and two LND nodes to cover live LNbits
+  REST and websocket integration, BOLT11 receive/send flows, status polling,
+  and processor restarts.
 
 [Unreleased]: https://github.com/cashubtc/cdk-payment-processors/compare/v0.1.0...HEAD

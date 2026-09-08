@@ -143,8 +143,26 @@ cargo clippy --locked --manifest-path crates/lnbits/Cargo.toml --all-targets -- 
 cargo test --locked --manifest-path crates/lnbits/Cargo.toml
 ```
 
-The unit tests do not require a live LNbits instance. End-to-end operation
-requires LNbits v1 with working REST and websocket endpoints.
+The unit tests do not require a live LNbits instance.
+
+### Regtest integration tests
+
+An opt-in regtest suite starts digest-pinned Bitcoin Core, two LND nodes, and
+LNbits Docker images. It funds a bidirectional Lightning channel, connects the
+processor to an LNbits wallet backed by one LND node, and uses the other node as
+the external payer. The suite exercises live REST and websocket integration,
+BOLT11 receive/send and status flows, and the processor binary across a restart.
+
+```bash
+just test-regtest
+```
+
+Prerequisites: Docker and `protoc`. The images default to digest-pinned LNbits
+v1.6.0, Bitcoin Core 25.0, and LND 0.19.3-beta releases. Override them with
+`LNBITS_REGTEST_IMAGE`, `LNBITS_REGTEST_BITCOIND_IMAGE`, and
+`LNBITS_REGTEST_LND_IMAGE`, respectively. Artifacts are kept under
+`target/lnbits-regtest/run-<timestamp>/`; set `TEST_DIRECTORY` to change the
+root.
 
 ## License
 
