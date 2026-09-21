@@ -24,6 +24,22 @@ BOLT11 features:
 | [Spark](crates/spark/README.md) | ❌ | ❌ | ❌ |
 | [Template](crates/template/README.md) | ❌ | ❌ | ✅ |
 
+## Support tiers
+
+Payment processors are grouped by their level of support:
+
+| Tier | Support | Processors |
+| --- | --- | --- |
+| Tier 1 | Supported by both the upstream project and the CDK team | [Bark](crates/bark/README.md) |
+| Tier 2 | Supported by the CDK team | [Spark](crates/spark/README.md) |
+| Tier 3 | Experimental; supported by external contributors only | [LDK Server](crates/ldk-server/README.md), [LNbits](crates/lnbits/README.md) |
+
+**Treat Tier 3 processors with caution: they are experimental and carry additional risk.**
+
+Carefully review and test Tier 3 processors before using them with real funds.
+
+The template is a starting point for new processors and does not have a support tier.
+
 ## Project structure
 
 ```text
