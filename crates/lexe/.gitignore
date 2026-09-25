@@ -1,0 +1,11 @@
+/target
+.idea/
+*.pem
+*.key
+*.crt
+.pre-commit-config.yaml
+.data/
+.cdk-lexe-payment-processor/
+config.toml
+*.db
+seedphrase*.txt
