@@ -11,6 +11,7 @@ contribution guidelines.
 | [Bark](crates/bark/README.md) | `sat` | ✅ | ❌ | ✅ | `arkoor` |
 | [LDK Server](crates/ldk-server/README.md) | `msat` | ✅ | ✅ | ❌ | - |
 | [LNbits](crates/lnbits/README.md) | `sat` | ✅ | ❌ | ❌ | - |
+| [Lexe](crates/lexe/README.md) | `sat` | ✅ | ❌ | ❌ | - |
 | [Spark](crates/spark/README.md) | `sat` | ✅ | ❌ | ❌ | - |
 | [Template](crates/template/README.md) | `sat` | ✅ | ❌ | ❌ | - |
 
@@ -21,8 +22,13 @@ BOLT11 features:
 | [Bark](crates/bark/README.md) | ❌ | ❌ | ✅ |
 | [LDK Server](crates/ldk-server/README.md) | ✅ | ❌ | ✅ |
 | [LNbits](crates/lnbits/README.md) | ❌ | ❌ | ✅ |
+| [Lexe](crates/lexe/README.md) | ❌ | ❌ | ✅ |
 | [Spark](crates/spark/README.md) | ❌ | ❌ | ❌ |
 | [Template](crates/template/README.md) | ❌ | ❌ | ✅ |
+
+Lexe's pinned SDK cannot enforce outgoing fee caps. Incoming BOLT11 payments
+are supported, but new capped melts are rejected; see its
+[payment limitations](crates/lexe/README.md#behavior-notes).
 
 ## Support tiers
 
@@ -32,7 +38,7 @@ Payment processors are grouped by their level of support:
 | --- | --- | --- |
 | Tier 1 | Supported by both the upstream project and the CDK team | [Bark](crates/bark/README.md) |
 | Tier 2 | Supported by the CDK team | [Spark](crates/spark/README.md) |
-| Tier 3 | Experimental; supported by external contributors only | [LDK Server](crates/ldk-server/README.md), [LNbits](crates/lnbits/README.md) |
+| Tier 3 | Experimental; supported by external contributors only | [LDK Server](crates/ldk-server/README.md), [Lexe](crates/lexe/README.md), [LNbits](crates/lnbits/README.md) |
 
 **Treat Tier 3 processors with caution: they are experimental and carry additional risk.**
 
@@ -46,6 +52,7 @@ The template is a starting point for new processors and does not have a support 
 crates/
 ├── bark/        # Payment processor backed by a Bark wallet
 ├── ldk-server/  # Payment processor backed by an LDK Server node
+├── lexe/        # Payment processor backed by a Lexe managed node
 ├── lnbits/      # Payment processor backed by an LNbits wallet
 ├── spark/       # Payment processor backed by a Spark wallet
 └── template/    # Starting point for integrating a new payment backend
