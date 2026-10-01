@@ -194,9 +194,9 @@ preimage once the payment succeeds.
 
 ```bash
 cargo fmt -- --check
-cargo check
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo check --locked
+cargo test --locked
+cargo clippy --locked --all-targets -- -D warnings
 ```
 
 ### Regtest integration tests
@@ -207,6 +207,15 @@ plus three `spark-so` operators with pre-seeded keyshares) using the upstream
 operator configuration, backend connectivity, event stream lifecycle, clean
 failure paths when the Spark Service Provider is unreachable, on-chain
 deposit claims, and the processor binary across restarts.
+
+Use the committed `Cargo.lock` for compatible Spark SDK test dependencies.
+You can compile the suite without starting Docker:
+
+```bash
+cargo test --locked --features regtest-tests --test regtest --no-run
+```
+
+To run the suite:
 
 ```bash
 just test-regtest
