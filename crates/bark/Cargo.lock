@@ -125,12 +125,12 @@ dependencies = [
 
 [[package]]
 name = "ark-lib"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "431932d6bc5b6ce8f5511e26e83dc9e4f11e7af61d5c49a5583892532e3fa110"
+checksum = "8a0a0fd9e01fd8c21d9ca27e368a6743a2b049bda2928da893877fd41385e272"
 dependencies = [
  "async-trait",
- "bark-bitcoin-ext 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-bitcoin-ext 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin",
  "chrono",
  "getrandom 0.3.4",
@@ -146,11 +146,11 @@ dependencies = [
 
 [[package]]
 name = "ark-lib"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "async-trait",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bitcoin",
  "chrono",
  "getrandom 0.3.4",
@@ -168,25 +168,25 @@ dependencies = [
 [[package]]
 name = "ark-testing"
 version = "0.0.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "async-trait",
  "axum",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bark-cln-rpc",
  "bark-json",
  "bark-rest",
  "bark-rest-client",
  "bark-server",
  "bark-server-log",
- "bark-server-rpc 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-wallet 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-server-rpc 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-wallet 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bdk_bitcoind_rpc",
  "bdk_esplora",
  "bdk_wallet",
- "bip321 0.4.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bip321 0.4.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bip39",
  "bitcoin",
  "bitcoincore-rpc",
@@ -441,9 +441,9 @@ dependencies = [
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9b2ba0cb97ff59e252c8922938c82dbeaad893d61c786cda49771c0ba034aaa"
+checksum = "cf0d973d95cca1755a281574be0256b8ba59b6dc56dc7688d4b6add56e4230b1"
 dependencies = [
  "async-trait",
  "bdk_bitcoind_rpc",
@@ -460,8 +460,8 @@ dependencies = [
 
 [[package]]
 name = "bark-bitcoin-ext"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -481,10 +481,10 @@ dependencies = [
 
 [[package]]
 name = "bark-cln-rpc"
-version = "0.7.0+cln.26.06.7-hold"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1+cln.26.06.7-hold"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bitcoin",
  "prost 0.14.4",
  "tonic 0.14.6",
@@ -494,9 +494,9 @@ dependencies = [
 
 [[package]]
 name = "bark-common"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "809da5eb2fd6d7b174e19aa58ae7274344e57ea24868cc1c67dc4cf4768d2a2c"
+checksum = "8c4214b99afa569b13a9431e174d91753f877f8b33562fac564b23bda87b94a9"
 dependencies = [
  "anyhow",
  "serde",
@@ -505,8 +505,8 @@ dependencies = [
 
 [[package]]
 name = "bark-common"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "anyhow",
  "serde",
@@ -515,13 +515,13 @@ dependencies = [
 
 [[package]]
 name = "bark-json"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-wallet 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-wallet 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bitcoin",
  "chrono",
  "humantime",
@@ -533,15 +533,15 @@ dependencies = [
 
 [[package]]
 name = "bark-rest"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "axum",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bark-json",
- "bark-wallet 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-wallet 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "base64 0.22.1",
  "bitcoin",
  "chrono",
@@ -563,8 +563,8 @@ dependencies = [
 
 [[package]]
 name = "bark-rest-client"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "bark-json",
  "bark-rest",
@@ -579,9 +579,9 @@ dependencies = [
 
 [[package]]
 name = "bark-runtime"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "022ef02fdc7d9521fd72a7348c06096f4a4579ece8dec45082876c8752aadba4"
+checksum = "2febf4fd0c684aa5b8b5cb6c037959044da96ec4cdbbfe29aeef6b42adb290dd"
 dependencies = [
  "futures",
  "gloo-timers",
@@ -593,8 +593,8 @@ dependencies = [
 
 [[package]]
 name = "bark-runtime"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "futures",
  "gloo-timers",
@@ -606,18 +606,18 @@ dependencies = [
 
 [[package]]
 name = "bark-server"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "async-stream",
  "async-trait",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bark-cln-rpc",
- "bark-common 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-common 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bark-server-log",
- "bark-server-rpc 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-server-rpc 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bb8",
  "bb8-postgres",
  "bdk_bitcoind_rpc",
@@ -674,11 +674,11 @@ dependencies = [
 
 [[package]]
 name = "bark-server-log"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bdk_wallet",
  "bitcoin",
  "chrono",
@@ -696,11 +696,11 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77bca85d451c111d425495ac6b0beb0ad3e2426b404afb2d6b08c6bba375081d"
+checksum = "92d05d7d09f81acc7a6a159bc9a16d75d4b93f33522f5f1e244d7970209df928"
 dependencies = [
- "ark-lib 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-lib 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bitcoin",
  "http",
  "log",
@@ -715,10 +715,10 @@ dependencies = [
 
 [[package]]
 name = "bark-server-rpc"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bitcoin",
  "http",
  "hyper-socks2",
@@ -735,17 +735,17 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1abf70976e9e9453c12b14f0a03cd7fb361eb51161864d076bd410e41dec6516"
+checksum = "68a67a3840166f997d6a2d944e2e87f16fbe465ca21eae524d726b33f29b9de0"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-lib 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "async-trait",
- "bark-bitcoin-ext 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "bark-common 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "bark-runtime 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "bark-server-rpc 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-bitcoin-ext 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-common 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-runtime 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-server-rpc 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bdk_bitcoind_rpc",
  "bdk_core",
  "bdk_esplora",
@@ -780,21 +780,21 @@ dependencies = [
 
 [[package]]
 name = "bark-wallet"
-version = "0.7.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+version = "0.7.1"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "ark-lib 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "async-trait",
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-common 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-runtime 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
- "bark-server-rpc 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-common 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-runtime 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
+ "bark-server-rpc 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bdk_bitcoind_rpc",
  "bdk_core",
  "bdk_esplora",
  "bdk_wallet",
- "bip321 0.4.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bip321 0.4.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bip39",
  "bitcoin",
  "bitcoind-async-client",
@@ -963,9 +963,9 @@ dependencies = [
 [[package]]
 name = "bip321"
 version = "0.4.0"
-source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0#6188e2d809f193716b2e571274179f069d9c19ca"
+source = "git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1#8f5d8c4f4afae87c8e4b3c6fb26fe06e9ae50e6a"
 dependencies = [
- "bark-bitcoin-ext 0.7.0 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.0)",
+ "bark-bitcoin-ext 0.7.1 (git+https://gitlab.com/ark-bitcoin/bark.git?tag=bark-0.7.1)",
  "bitcoin",
  "lightning",
  "lightning-invoice",
@@ -1420,13 +1420,13 @@ name = "cdk-payment-processor-bark"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "ark-lib 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ark-lib 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ark-testing",
  "async-trait",
  "axum",
- "bark-bitcoin-ext 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-bitcoin-ext 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bark-cln-rpc",
- "bark-wallet 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bark-wallet 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "bip39",
  "bitcoin",
  "bitcoincore-rpc",
