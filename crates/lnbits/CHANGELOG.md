@@ -20,4 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   REST and websocket integration, BOLT11 receive/send flows, status polling,
   and processor restarts.
 
+### Changed
+
+- Updated all CDK dependencies from `0.18.1` to `0.18.2`.
+
 [Unreleased]: https://github.com/cashubtc/cdk-payment-processors/compare/v0.1.0...HEAD

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated all CDK dependencies from `0.18.1` to `0.18.2`.
+
 ### Fixed
 
 - Arkoor quote requests accept metadata without `amount_sat` when the typed
