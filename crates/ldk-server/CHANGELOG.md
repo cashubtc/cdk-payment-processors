@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated all CDK dependencies from `0.18.1` to `0.18.2`.
 
+### Fixed
+
+- Fixed intermittent `Payment not found` failures in the direct BOLT11 send and
+  gRPC melt regtest scenarios by waiting for payment history to catch up with
+  live payment status before asserting hash-based results.
+
 ## [0.1.0] - 2026-09-02
 
 ### Added

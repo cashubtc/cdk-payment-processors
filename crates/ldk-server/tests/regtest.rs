@@ -492,8 +492,10 @@ async fn payer_invoice(
 
 /// The daemon records payments before they settle, so `make_payment` can
 /// legitimately return `Pending`; finality arrives through status checks.
+/// Hash lookups scan history populated by the daemon's event handler and can
+/// still return `PaymentNotFound` after a live payment-ID lookup reports success.
 async fn await_terminal(
-    backend: &LdkServerBackend,
+    backend: &impl MintPayment<Err = cdk_common::payment::Error>,
     identifier: &PaymentIdentifier,
 ) -> Result<MakePaymentResponse> {
     eventually(
@@ -873,9 +875,9 @@ async fn bolt11_send_scenario(payer: &LdkNode, backend: &LdkServerBackend) -> Re
     }
 
     // Status checks report totals in msat regardless of the quote unit.
-    let by_hash = backend
-        .check_outgoing_payment(&PaymentIdentifier::PaymentHash(payment_hash))
-        .await?;
+    let by_hash = await_terminal(backend, &PaymentIdentifier::PaymentHash(payment_hash))
+        .await
+        .context("BOLT11 send history lookup by hash")?;
     assert_eq!(by_hash.status, MeltQuoteState::Paid);
     let proof = by_hash
         .payment_proof
@@ -1170,23 +1172,17 @@ async fn processor_scenario(payer: &LdkNode, node: &LdkNode, logs: &Path) -> Res
         )
         .await?;
     let paid = if started.status == MeltQuoteState::Pending {
-        let identifier = started.payment_lookup_id.clone();
-        eventually("gRPC melt terminal state", NETWORK_TIMEOUT, || async {
-            let response = client
-                .check_outgoing_payment(&identifier)
-                .await
-                .map_err(anyhow::Error::from)?;
-            Ok((response.status != MeltQuoteState::Pending).then_some(response))
-        })
-        .await?
+        await_terminal(&client, &started.payment_lookup_id)
+            .await
+            .context("gRPC melt terminal state")?
     } else {
         started
     };
     assert_eq!(paid.status, MeltQuoteState::Paid);
     assert!(paid.payment_proof.is_some());
-    let by_hash = client
-        .check_outgoing_payment(&PaymentIdentifier::PaymentHash(payment_hash))
-        .await?;
+    let by_hash = await_terminal(&client, &PaymentIdentifier::PaymentHash(payment_hash))
+        .await
+        .context("gRPC melt history lookup by hash")?;
     assert_eq!(by_hash.status, MeltQuoteState::Paid);
 
     process.stop().await?;

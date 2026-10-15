@@ -125,6 +125,8 @@ invoice expiry, processor restarts, event streaming, and a full Cashu
 mint/melt round trip. It prints progress between scenario groups and applies a
 timeout to Cashu melt confirmation so event-delivery regressions fail with a
 clear error instead of waiting indefinitely.
+Outgoing payment-hash checks also wait within the test timeout for LDK Server's
+event handler to populate payment history, which can lag live payment-ID status.
 
 ```bash
 just test-regtest
