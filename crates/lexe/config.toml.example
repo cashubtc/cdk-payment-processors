@@ -1,0 +1,49 @@
+# Copy this file to config.toml and fill in your values
+
+# gRPC server configuration
+address = "127.0.0.1"
+port = 50051
+
+# TLS (mTLS) configuration. With TLS disabled the server only starts when
+# allow_insecure is set to true explicitly.
+tls_enable = false
+allow_insecure = true
+tls_cert_path = "certs/server.crt"
+tls_key_path = "certs/server.key"
+tls_client_ca_path = "certs/ca.pem"
+
+# Lexe backend configuration
+[lexe]
+# Credential sources match lexe-cli. Set at most one.
+#
+# 1. Import an SDK client blob (Lexe app: Menu -> SDK clients, or `lexe-cli` export).
+#    LEXE_CLIENT_CREDENTIALS overrides this value.
+client_credentials = "PASTE_BASE64_LEXE_SDK_CLIENT_CREDENTIALS"
+# client_credentials_path = "/var/lib/cdk/lexe-client-credentials.txt"  # LEXE_CLIENT_CREDENTIALS_PATH
+
+# 2. Import a root seed (BIP39 mnemonic or 64-char hex), like lexe-cli --root-seed.
+# root_seed = "your BIP39 mnemonic"            # LEXE_ROOT_SEED, or LEXE_SEED_PHRASE
+# root_seed_path = "/var/lib/cdk/seedphrase.txt"  # LEXE_ROOT_SEED_PATH
+
+# 3. Create a wallet like `lexe init` when every source above is unset.
+#    Generates a seed, writes it under data_dir, then signs up and provisions.
+#    Set false to fail closed instead of creating one.
+create_wallet = true
+
+# Lexe environment: mainnet | testnet3 | regtest
+network = "mainnet"
+
+# Data directory for the Lexe wallet state and the local quote database.
+data_dir = ".data/lexe"
+
+# Estimated outgoing fee for melt quotes (Lexe has no fee-estimate API):
+# fee = max(ceil(fee_reserve_ppm/1e6 * amount), fee_reserve_min_sat)
+# Same reserve defaults as LDK Server: 1% and 2 sats.
+# This is not a fee cap. The SDK cannot enforce max_fee_amount, so new
+# capped payment requests are rejected before submission (see README).
+fee_reserve_ppm = 10000
+fee_reserve_min_sat = 2
+
+# Default outgoing payment timeout in seconds when the mint does not
+# provide one (Lexe preflight can take ~60s; keep well above that).
+payment_timeout_secs = 300

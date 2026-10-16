@@ -1,0 +1,31 @@
+[package]
+name = "cdk-payment-processor-lexe"
+version = "0.1.0"
+edition = "2021"
+authors = ["Vincenzo Palazzo <vincenzopalazzodev@gmail.com>"]
+description = "CDK Payment Processor backed by a Lexe managed non-custodial Lightning node"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+base64 = "0.22"
+cdk-common = { version = "0.18.1", default-features = false, features = ["mint", "grpc"] }
+cdk-payment-processor = { version = "0.18.1", default-features = false }
+figment = { version = "0.10", features = ["env", "toml"] }
+futures = "0.3"
+hex = "0.4"
+# The pinned low-level client separates submission errors from settlement errors.
+lexe = { version = "=0.1.22", features = ["unstable"] }
+lexe-api-core = "=0.1.22"
+redb = "4.1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "signal", "sync"] }
+tokio-stream = "0.1"
+tonic = { version = "0.14", features = ["transport", "tls-ring"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+tempfile = "3"
