@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Updated all CDK dependencies from `0.18.1` to `0.18.2`.
 
+### Fixed
+
+- `check_outgoing_payment` no longer reports `Pending` indefinitely for melts
+  whose outgoing Spark transfer was returned or expired before the SSP recorded
+  a send. Those transfers cannot settle, and their quotes now correctly report
+  `Unpaid` so the mint can release the reserved proofs.
+
 ## [0.1.0] - 2026-09-02
 
 ### Added
