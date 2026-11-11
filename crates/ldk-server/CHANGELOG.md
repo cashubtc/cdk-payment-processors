@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- BOLT12 melts now return an authoritative failure for pre-dispatch validation
+  and availability failures and explicit invalid-request/authentication
+  rejections, allowing CDK to release reserved proofs. Ambiguous send errors
+  remain unresolved rather than being treated as payment failures.
+- Preserve the BOLT12 payment ID when status retrieval fails after an accepted
+  send, and return `UNKNOWN` for unavailable payment-ID lookups so CDK can
+  retain the initial pending result and reconcile it later.
 - Fixed intermittent `Payment not found` failures in the direct BOLT11 send and
   gRPC melt regtest scenarios by waiting for payment history to catch up with
   live payment status before asserting hash-based results.
