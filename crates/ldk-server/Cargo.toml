@@ -47,6 +47,12 @@ cdk-sqlite = { version = "0.18.2", default-features = false, features = ["mint",
 corepc-node = { version = "0.10", features = ["download", "29_0"], optional = true }
 lightning-invoice = { version = "0.34", optional = true }
 
+[dev-dependencies]
+hyper = { version = "0.14", features = ["server", "http1", "http2"] }
+prost = "0.11"
+rcgen = "0.13"
+tokio-rustls = "0.24"
+
 [[test]]
 name = "regtest"
 path = "tests/regtest.rs"
