@@ -304,6 +304,20 @@ impl SparkBackend {
         }
     }
 
+    /// Melt state for an outgoing transfer that has no recorded SSP payment.
+    /// A preimage always means paid; a transfer that can no longer pay (the
+    /// SSP returned it or it expired) is failed, and anything else is still
+    /// in flight.
+    fn transfer_melt_state(status: TransferStatus, has_preimage: bool) -> MeltQuoteState {
+        if has_preimage {
+            return MeltQuoteState::Paid;
+        }
+        match status {
+            TransferStatus::Expired | TransferStatus::Returned => MeltQuoteState::Unpaid,
+            _ => MeltQuoteState::Pending,
+        }
+    }
+
     fn send_status(status: LightningSendStatus, has_preimage: bool) -> MeltQuoteState {
         if has_preimage || matches!(status, LightningSendStatus::LightningPaymentSucceeded) {
             return MeltQuoteState::Paid;
@@ -750,11 +764,7 @@ impl MintPayment for SparkBackend {
                     .user_request
                     .as_ref()
                     .and_then(|request| request.get_lightning_preimage());
-                let status = if payment_proof.is_some() {
-                    MeltQuoteState::Paid
-                } else {
-                    MeltQuoteState::Pending
-                };
+                let status = Self::transfer_melt_state(transfer.status, payment_proof.is_some());
                 return Ok(MakePaymentResponse {
                     payment_lookup_id: payment_identifier.clone(),
                     payment_proof,
@@ -856,6 +866,32 @@ mod tests {
         );
         assert_eq!(
             SparkBackend::send_status(LightningSendStatus::Created, false),
+            MeltQuoteState::Pending
+        );
+    }
+
+    #[test]
+    fn maps_terminal_transfer_statuses() {
+        use spark_wallet::TransferStatus;
+
+        assert_eq!(
+            SparkBackend::transfer_melt_state(TransferStatus::SenderKeyTweakPending, true),
+            MeltQuoteState::Paid
+        );
+        assert_eq!(
+            SparkBackend::transfer_melt_state(TransferStatus::Completed, false),
+            MeltQuoteState::Pending
+        );
+        assert_eq!(
+            SparkBackend::transfer_melt_state(TransferStatus::Expired, false),
+            MeltQuoteState::Unpaid
+        );
+        assert_eq!(
+            SparkBackend::transfer_melt_state(TransferStatus::Returned, false),
+            MeltQuoteState::Unpaid
+        );
+        assert_eq!(
+            SparkBackend::transfer_melt_state(TransferStatus::SenderKeyTweakPending, false),
             MeltQuoteState::Pending
         );
     }
