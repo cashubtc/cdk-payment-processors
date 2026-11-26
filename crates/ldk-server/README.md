@@ -57,12 +57,18 @@ values.
 | `tls_key_path` | `TLS_KEY_PATH` | `certs/server.key` |
 | `tls_client_ca_path` | `TLS_CLIENT_CA_PATH` | `certs/ca.pem` |
 | `ldk.address` | `LDK_ADDRESS` | Required |
-| `ldk.api_key` | `LDK_API_KEY` | Required |
+| `ldk.macaroon` | `LDK_MACAROON` | Required |
 | `ldk.tls_cert_path` | `LDK_TLS_CERT_PATH` | Required |
 | `ldk.fee_reserve_min_sat` | `LDK_FEE_RESERVE_MIN_SAT` | `2` |
 | `ldk.fee_reserve_percent` | `LDK_FEE_RESERVE_PERCENT` | `0.01` |
 | `ldk.max_payment_scan_pages` | `LDK_MAX_PAYMENT_SCAN_PAGES` | `32` |
 | `ldk.payment_methods` | `LDK_PAYMENT_METHODS` | all supported |
+
+
+`ldk.macaroon` is the hex text already stored in
+`<storage>/<network>/macaroons/admin.macaroon`. Do not hex-encode that file
+again. `LDK_API_KEY` is rejected: current ldk-server no longer accepts the
+HMAC API key.
 
 Boolean environment variables accept only the literal values `true` and
 `false`.

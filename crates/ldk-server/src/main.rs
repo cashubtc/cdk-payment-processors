@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
 
     let backend_cfg = BackendConfig {
         address: cfg.ldk.address.clone(),
-        api_key: cfg.ldk.api_key.clone(),
+        macaroon: cfg.ldk.macaroon.clone(),
         cert_pem,
         fee_reserve: FeeReserve {
             min_fee_reserve: Amount::from(cfg.ldk.fee_reserve_min_sat),

@@ -35,9 +35,9 @@ use corepc_node::Node;
 use futures::{Stream, StreamExt};
 use ldk_server_client::client::{EventStream, LdkServerClient};
 use ldk_server_client::ldk_server_grpc::api::{
-    Bolt11FailForHashRequest, Bolt11ReceiveForHashRequest, Bolt11ReceiveRequest, Bolt11SendRequest,
-    Bolt12SendRequest, GetBalancesRequest, GetNodeInfoRequest, ListChannelsRequest,
-    OnchainReceiveRequest, OpenChannelRequest,
+    open_channel_request, Bolt11FailForIdRequest, Bolt11ReceiveForHashRequest,
+    Bolt11ReceiveRequest, Bolt11SendRequest, Bolt12SendRequest, GetBalancesRequest,
+    GetNodeInfoRequest, ListChannelsRequest, OnchainReceiveRequest, OpenChannelRequest,
 };
 use ldk_server_client::ldk_server_grpc::events::event_envelope;
 use ldk_server_client::ldk_server_grpc::types::{
@@ -52,7 +52,7 @@ use tokio::time::Instant;
 // Keep in sync with the `ldk-server-client` rev pinned in Cargo.toml so the
 // daemon under test always speaks the protocol the client was generated from.
 const LDK_SERVER_REPO: &str = "https://github.com/lightningdevkit/ldk-server";
-const LDK_SERVER_REV: &str = "50fe7523be3529d86bfee0dfc35df9a52aca7310";
+const LDK_SERVER_REV: &str = "d7e7a2e708664af922c53c786ad6a5df622f5dd8";
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 const FEE_RESERVE_PADDING_SAT: u64 = 50;
@@ -269,7 +269,7 @@ struct LdkNode {
     child: Child,
     grpc_port: u16,
     p2p_port: u16,
-    api_key: String,
+    macaroon: String,
     tls_cert_pem: Vec<u8>,
     tls_cert_path: PathBuf,
     node_id: String,
@@ -317,10 +317,14 @@ impl LdkNode {
             .spawn()
             .with_context(|| format!("spawn ldk-server daemon at {}", binary.display()))?;
 
-        let api_key_path = storage_dir.join("regtest").join("api_key");
+        // Upstream writes a hex-encoded reusable v2 macaroon, not a binary HMAC key.
+        let macaroon_path = storage_dir
+            .join("regtest")
+            .join("macaroons")
+            .join("admin.macaroon");
         let tls_cert_path = storage_dir.join("tls.crt");
         let credentials = tokio::try_join!(
-            wait_for_file(&api_key_path, Duration::from_secs(60)),
+            wait_for_file(&macaroon_path, Duration::from_secs(60)),
             wait_for_file(&tls_cert_path, Duration::from_secs(60)),
         );
         if let Err(error) = credentials {
@@ -329,14 +333,14 @@ impl LdkNode {
             bail!("daemon {alias} did not produce credentials: {error:#}");
         }
 
-        let api_key_bytes = std::fs::read(&api_key_path)?;
-        anyhow::ensure!(!api_key_bytes.is_empty(), "empty ldk-server api key file");
-        let api_key = hex::encode(api_key_bytes);
+        let macaroon = std::fs::read_to_string(&macaroon_path)?;
+        let macaroon = macaroon.trim().to_string();
+        anyhow::ensure!(!macaroon.is_empty(), "empty ldk-server admin macaroon");
         let tls_cert_pem = std::fs::read(&tls_cert_path)?;
 
         let client = LdkServerClient::new(
             format!("127.0.0.1:{grpc_port}"),
-            api_key.clone(),
+            macaroon.clone(),
             &tls_cert_pem,
         )
         .map_err(anyhow::Error::msg)
@@ -366,7 +370,7 @@ impl LdkNode {
             child,
             grpc_port,
             p2p_port,
-            api_key,
+            macaroon,
             tls_cert_pem,
             tls_cert_path,
             node_id: info.node_id,
@@ -417,11 +421,13 @@ async fn open_channel(bitcoind: &Bitcoind, from: &LdkNode, to: &LdkNode) -> Resu
         .open_channel(OpenChannelRequest {
             node_pubkey: to.node_id.clone(),
             address: format!("127.0.0.1:{}", to.p2p_port),
-            channel_amount_sats: CHANNEL_SATS,
             push_to_counterparty_msat: Some(CHANNEL_PUSH_MSAT),
             channel_config: None,
             announce_channel: false,
             disable_counterparty_reserve: false,
+            amount: Some(open_channel_request::Amount::ChannelAmountSats(
+                CHANNEL_SATS,
+            )),
         })
         .await)?;
     eprintln!("Channel {} opening", opened.user_channel_id);
@@ -444,7 +450,7 @@ async fn open_channel(bitcoind: &Bitcoind, from: &LdkNode, to: &LdkNode) -> Resu
 fn backend_config(node: &LdkNode) -> BackendConfig {
     BackendConfig {
         address: format!("127.0.0.1:{}", node.grpc_port),
-        api_key: node.api_key.clone(),
+        macaroon: node.macaroon.clone(),
         cert_pem: node.tls_cert_pem.clone(),
         fee_reserve: FeeReserve {
             min_fee_reserve: Amount::from(2_u64),
@@ -530,7 +536,7 @@ impl ProcessorProcess {
             .env("SERVER_PORT", port.to_string())
             .env("ALLOW_INSECURE", "true")
             .env("LDK_ADDRESS", format!("127.0.0.1:{}", node.grpc_port))
-            .env("LDK_API_KEY", &node.api_key)
+            .env("LDK_MACAROON", &node.macaroon)
             .env("LDK_TLS_CERT_PATH", &node.tls_cert_path)
             .env("RUST_LOG", "debug")
             .stdout(stdout)
@@ -952,7 +958,7 @@ async fn held_htlc_invoice(payer: &LdkNode, amount_msat: u64, marker: u8) -> Res
 
 /// Waits until the hodl invoice holder reports the HTLC as claimable. Failing
 /// or claiming earlier races the in-flight HTLC and does nothing.
-async fn await_claimable(mut stream: EventStream, payment_hash: [u8; 32]) -> Result<()> {
+async fn await_claimable(mut stream: EventStream, payment_hash: [u8; 32]) -> Result<String> {
     let hash_hex = hex::encode(payment_hash);
     let deadline = Instant::now() + NETWORK_TIMEOUT;
     loop {
@@ -965,12 +971,19 @@ async fn await_claimable(mut stream: EventStream, payment_hash: [u8; 32]) -> Res
         match message {
             Some(Ok(envelope)) => match envelope.event {
                 Some(event_envelope::Event::PaymentClaimable(claimable)) => {
-                    if let Some(kind) = claimable.payment.and_then(|payment| payment.kind) {
-                        if let Some(payment_kind::Kind::Bolt11(bolt11)) = kind.kind {
-                            if bolt11.hash.eq_ignore_ascii_case(&hash_hex) {
-                                return Ok(());
+                    let hash_matches = claimable
+                        .payment
+                        .as_ref()
+                        .and_then(|payment| payment.kind.as_ref())
+                        .and_then(|kind| kind.kind.as_ref())
+                        .is_some_and(|kind| match kind {
+                            payment_kind::Kind::Bolt11(bolt11) => {
+                                bolt11.hash.eq_ignore_ascii_case(&hash_hex)
                             }
-                        }
+                            _ => false,
+                        });
+                    if hash_matches {
+                        return Ok(claimable.payment_id);
                     }
                 }
                 _ => continue,
@@ -1017,12 +1030,10 @@ async fn pending_then_failed_send_scenario(
         .context("held status lookup by id")?;
     assert_eq!(held.status, MeltQuoteState::Pending);
 
-    await_claimable(claimable_stream, payment_hash).await?;
+    let payment_id = await_claimable(claimable_stream, payment_hash).await?;
     rpc(payer
         .client
-        .bolt11_fail_for_hash(Bolt11FailForHashRequest {
-            payment_hash: hex::encode(payment_hash),
-        })
+        .bolt11_fail_for_id(Bolt11FailForIdRequest { payment_id })
         .await)
     .context("fail held HTLC")?;
 
@@ -1303,12 +1314,10 @@ async fn cashu_scenario(
         MeltOutcome::Pending(_) => {}
         MeltOutcome::Paid(_) => bail!("failing melt settled before the HTLC could be failed"),
     }
-    await_claimable(claimable_stream, *held_hash.as_byte_array()).await?;
+    let payment_id = await_claimable(claimable_stream, *held_hash.as_byte_array()).await?;
     rpc(payer
         .client
-        .bolt11_fail_for_hash(Bolt11FailForHashRequest {
-            payment_hash: hex::encode(held_hash.as_byte_array()),
-        })
+        .bolt11_fail_for_id(Bolt11FailForIdRequest { payment_id })
         .await)
     .context("fail held HTLC behind Cashu melt")?;
 

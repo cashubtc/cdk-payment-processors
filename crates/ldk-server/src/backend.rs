@@ -24,8 +24,8 @@ use ldk_server_client::ldk_server_grpc::api::{
 };
 use ldk_server_client::ldk_server_grpc::events::{event_envelope, EventEnvelope};
 use ldk_server_client::ldk_server_grpc::types::{
-    bolt11_invoice_description, payment_kind, Bolt11InvoiceDescription, PageToken, Payment,
-    PaymentDirection, PaymentStatus, RouteParametersConfig,
+    bolt11_invoice_description, payment_kind, Bolt11InvoiceDescription, Payment, PaymentDirection,
+    PaymentStatus, RouteParametersConfig,
 };
 use lightning::offers::offer::Amount as OfferAmount;
 use tokio::sync::{Mutex, Notify};
@@ -109,8 +109,8 @@ type OutgoingPaymentCorrelations = OutgoingPaymentCorrelator;
 pub struct Config {
     /// Server address without scheme, for example `127.0.0.1:3536`.
     pub address: String,
-    /// HMAC API key expected by LDK Server.
-    pub api_key: String,
+    /// Hex-encoded reusable v2 macaroon. The client binds a copy to each request.
+    pub macaroon: String,
     /// PEM encoded TLS certificate to pin.
     pub cert_pem: Vec<u8>,
     /// Fee reserve used for melt quotes.
@@ -126,7 +126,7 @@ impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Config")
             .field("address", &self.address)
-            .field("api_key", &"[REDACTED]")
+            .field("macaroon", &"[REDACTED]")
             .field("cert_pem", &format!("{} bytes", self.cert_pem.len()))
             .field("fee_reserve", &self.fee_reserve)
             .field("max_payment_scan_pages", &self.max_payment_scan_pages)
@@ -139,13 +139,13 @@ impl Config {
     /// Create a new LDK Server backend configuration.
     pub fn new(
         address: String,
-        api_key: String,
+        macaroon: String,
         cert_pem: Vec<u8>,
         fee_reserve: FeeReserve,
     ) -> Self {
         Self {
             address,
-            api_key,
+            macaroon,
             cert_pem,
             fee_reserve,
             max_payment_scan_pages: DEFAULT_MAX_PAYMENT_SCAN_PAGES,
@@ -220,7 +220,7 @@ impl LdkServerBackend {
     /// Returns an error if the TLS certificate cannot be parsed or the client cannot be built.
     pub fn new(config: Config) -> Result<Self, Error> {
         let address = normalize_address(&config.address);
-        let client = LdkServerClient::new(address, config.api_key, &config.cert_pem)
+        let client = LdkServerClient::new(address, config.macaroon, &config.cert_pem)
             .map_err(Error::Client)?;
 
         Ok(Self {
@@ -249,7 +249,7 @@ impl LdkServerBackend {
     where
         F: FnMut(&Payment) -> bool,
     {
-        let mut page_token: Option<PageToken> = None;
+        let mut page_token: Option<String> = None;
         let mut payments = Vec::new();
 
         for _ in 0..self.max_payment_scan_pages {
@@ -348,7 +348,10 @@ impl LdkServerBackend {
             ),
             payment_kind::Kind::Bolt12Offer(bolt12) => (
                 PaymentIdentifier::OfferId(bolt12.offer_id.clone()),
-                bolt12.hash.clone().unwrap_or_else(|| payment.id.clone()),
+                bolt12
+                    .hash
+                    .clone()
+                    .unwrap_or_else(|| payment.payment_id.clone()),
             ),
             _ => return Ok(None),
         };
@@ -401,7 +404,10 @@ impl LdkServerBackend {
                 .await
             }
             event_envelope::Event::PaymentForwarded(_)
-            | event_envelope::Event::PaymentClaimable(_) => Ok(None),
+            | event_envelope::Event::PaymentClaimable(_)
+            | event_envelope::Event::ChannelStateChanged(_)
+            | event_envelope::Event::SpliceNegotiated(_)
+            | event_envelope::Event::SpliceNegotiationFailed(_) => Ok(None),
         }
     }
 }
@@ -982,7 +988,7 @@ async fn remember_outgoing_payment_context_keys(
                 Err(err) => {
                     tracing::warn!(
                         "Could not map buffered LDK Server outgoing payment {}: {}",
-                        unmatched.payment.id,
+                        unmatched.payment.payment_id,
                         err
                     );
                     insert_outgoing_context_keys(&mut state, &keys, context);
@@ -1024,7 +1030,7 @@ async fn take_correlated_outgoing_event(
 
     tracing::debug!(
         "Buffering uncorrelated LDK Server outgoing payment {}: {:?}",
-        payment.id,
+        payment.payment_id,
         outcome
     );
     state.unmatched.push_back(UnmatchedOutgoingPayment {
@@ -1089,7 +1095,7 @@ fn expire_correlator_state(state: &mut OutgoingPaymentCorrelatorState, now: Inst
         if let Some(unmatched) = state.unmatched.pop_front() {
             tracing::warn!(
                 "Dropping uncorrelated LDK Server outgoing payment {} after {:?}",
-                unmatched.payment.id,
+                unmatched.payment.payment_id,
                 UNMATCHED_OUTGOING_EVENT_TTL
             );
         }
@@ -1103,7 +1109,8 @@ fn map_outgoing_payment_event(
 ) -> Result<Event, payment::Error> {
     match outcome {
         OutgoingPaymentOutcome::Succeeded => {
-            let payment_lookup_id = PaymentIdentifier::PaymentId(hex_to_array(&payment.id)?);
+            let payment_lookup_id =
+                PaymentIdentifier::PaymentId(hex_to_array(&payment.payment_id)?);
             let details = LdkServerBackend::make_payment_response_from_payment(
                 &context.unit,
                 payment_lookup_id,
@@ -1112,7 +1119,7 @@ fn map_outgoing_payment_event(
             tracing::debug!(
                 "LDK Server outgoing payment succeeded for quote {}: {}",
                 context.quote_id,
-                payment.id
+                payment.payment_id
             );
             Ok(Event::PaymentSuccessful {
                 quote_id: context.quote_id.clone(),
@@ -1120,11 +1127,11 @@ fn map_outgoing_payment_event(
             })
         }
         OutgoingPaymentOutcome::Failed => {
-            let reason = format!("LDK Server payment {} failed", payment.id);
+            let reason = format!("LDK Server payment {} failed", payment.payment_id);
             tracing::warn!(
                 "LDK Server outgoing payment failed for quote {}: {}",
                 context.quote_id,
-                payment.id
+                payment.payment_id
             );
             Ok(Event::PaymentFailed {
                 quote_id: context.quote_id.clone(),
@@ -1135,7 +1142,7 @@ fn map_outgoing_payment_event(
 }
 
 fn outgoing_payment_correlation_keys(payment: &Payment) -> Vec<String> {
-    let mut keys = vec![normalize_payment_correlation_key(&payment.id)];
+    let mut keys = vec![normalize_payment_correlation_key(&payment.payment_id)];
 
     if let Some(kind) = payment.kind.as_ref().and_then(|kind| kind.kind.as_ref()) {
         match kind {
@@ -1420,12 +1427,13 @@ mod tests {
 
     fn test_bolt11_payment(status: PaymentStatus, amount_msat: Option<u64>) -> Payment {
         Payment {
-            id: "02".repeat(32),
+            payment_id: "02".repeat(32),
             kind: Some(PaymentKind {
                 kind: Some(payment_kind::Kind::Bolt11(Bolt11 {
                     hash: "01".repeat(32),
                     preimage: Some("03".repeat(32)),
                     secret: None,
+                    counterparty_skimmed_fee_msat: None,
                 })),
             }),
             amount_msat,
@@ -1442,7 +1450,7 @@ mod tests {
         latest_update_timestamp: u64,
     ) -> Payment {
         Payment {
-            id: format!("{id_byte:02x}").repeat(32),
+            payment_id: format!("{id_byte:02x}").repeat(32),
             latest_update_timestamp,
             ..test_bolt11_payment(status, None)
         }
@@ -1511,7 +1519,10 @@ mod tests {
         let envelope = EventEnvelope {
             event: Some(event_envelope::Event::PaymentSuccessful(
                 LdkPaymentSuccessful {
+                    payment_id: "02".repeat(32),
                     payment: Some(payment),
+                    payment_preimage: None,
+                    bolt12_invoice: None,
                 },
             )),
         };
@@ -1553,7 +1564,9 @@ mod tests {
         .await;
         let envelope = EventEnvelope {
             event: Some(event_envelope::Event::PaymentFailed(LdkPaymentFailed {
+                payment_id: "02".repeat(32),
                 payment: Some(test_bolt11_payment(PaymentStatus::Failed, None)),
+                reason: None,
             })),
         };
 
@@ -1580,7 +1593,10 @@ mod tests {
         let envelope = EventEnvelope {
             event: Some(event_envelope::Event::PaymentSuccessful(
                 LdkPaymentSuccessful {
+                    payment_id: "02".repeat(32),
                     payment: Some(test_bolt11_payment(PaymentStatus::Succeeded, Some(1_000))),
+                    payment_preimage: None,
+                    bolt12_invoice: None,
                 },
             )),
         };
@@ -1602,10 +1618,13 @@ mod tests {
         let envelope = EventEnvelope {
             event: Some(event_envelope::Event::PaymentSuccessful(
                 LdkPaymentSuccessful {
+                    payment_id: "02".repeat(32),
                     payment: Some(Payment {
                         fee_paid_msat: Some(1),
                         ..test_bolt11_payment(PaymentStatus::Succeeded, Some(1_000))
                     }),
+                    payment_preimage: None,
+                    bolt12_invoice: None,
                 },
             )),
         };
@@ -1740,7 +1759,7 @@ mod tests {
         let selected = select_bolt11_payment(vec![failed, pending])
             .expect("payment details should be selected");
 
-        assert_eq!(selected.id, "02".repeat(32));
+        assert_eq!(selected.payment_id, "02".repeat(32));
         assert_eq!(
             payment_status(&selected).expect("valid status"),
             PaymentStatus::Pending
@@ -1758,7 +1777,7 @@ mod tests {
         let selected = select_bolt11_payment(vec![pending, succeeded])
             .expect("payment details should be selected");
 
-        assert_eq!(selected.id, "02".repeat(32));
+        assert_eq!(selected.payment_id, "02".repeat(32));
         assert_eq!(
             payment_status(&selected).expect("valid status"),
             PaymentStatus::Succeeded
