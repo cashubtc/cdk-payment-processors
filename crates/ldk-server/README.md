@@ -9,6 +9,20 @@ events that arrive before the quote ID is known are buffered briefly and
 replayed when `make_payment` registers the payment, so the event stream never
 sleeps waiting for correlation.
 
+BOLT12 dispatch checks offer expiry and node availability before sending. If
+these checks fail, or LDK rejects the send as invalid or unauthenticated, the
+processor returns a terminal failure so CDK can release the reserved proofs.
+Once LDK returns a payment ID, an unavailable status lookup returns `PENDING`
+with that ID; later inconclusive ID lookups return `UNKNOWN`, allowing CDK to
+retain the ID and reconcile the payment when the node is available again.
+
+The pinned LDK API assigns BOLT12 payment IDs on send, so quotes still have no
+lookup ID. A connection failure **during** the send, a lost send response, or
+an ambiguous server error can still require operator reconciliation: the
+processor cannot prove that no payment was dispatched and does not release
+proofs in those cases. This change does not automatically recover previously
+stuck quotes that have no lookup ID.
+
 ```text
 cdk-mintd (payment_backend = "grpcprocessor")
   -> gRPC        cdk-payment-processor-ldk-server (this crate)
@@ -125,6 +139,9 @@ invoice expiry, processor restarts, event streaming, and a full Cashu
 mint/melt round trip. It prints progress between scenario groups and applies a
 timeout to Cashu melt confirmation so event-delivery regressions fail with a
 clear error instead of waiting indefinitely.
+It also verifies that a BOLT12 melt attempted while the mint's LDK node is down
+releases the proofs and remains unpaid after a mint restart, and that expired
+BOLT12 offers release the proofs without dispatch.
 Outgoing payment-hash checks also wait within the test timeout for LDK Server's
 event handler to populate payment history, which can lag live payment-ID status.
 

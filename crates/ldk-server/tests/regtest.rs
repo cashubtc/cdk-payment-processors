@@ -36,8 +36,8 @@ use futures::{Stream, StreamExt};
 use ldk_server_client::client::{EventStream, LdkServerClient};
 use ldk_server_client::ldk_server_grpc::api::{
     Bolt11FailForHashRequest, Bolt11ReceiveForHashRequest, Bolt11ReceiveRequest, Bolt11SendRequest,
-    Bolt12SendRequest, GetBalancesRequest, GetNodeInfoRequest, ListChannelsRequest,
-    OnchainReceiveRequest, OpenChannelRequest,
+    Bolt12ReceiveRequest, Bolt12SendRequest, GetBalancesRequest, GetNodeInfoRequest,
+    ListChannelsRequest, OnchainReceiveRequest, OpenChannelRequest,
 };
 use ldk_server_client::ldk_server_grpc::events::event_envelope;
 use ldk_server_client::ldk_server_grpc::types::{
@@ -506,7 +506,11 @@ async fn await_terminal(
                 .check_outgoing_payment(identifier)
                 .await
                 .map_err(anyhow::Error::from)?;
-            Ok((response.status != MeltQuoteState::Pending).then_some(response))
+            Ok(matches!(
+                response.status,
+                MeltQuoteState::Paid | MeltQuoteState::Failed
+            )
+            .then_some(response))
         },
     )
     .await
@@ -663,22 +667,29 @@ impl MintHttpServer {
             .with_name("LDK Server regtest mint".to_string())
             .with_description("LDK Server payment processor regtest".to_string())
             .with_urls(vec![format!("http://127.0.0.1:{port}")]);
-        builder
-            .add_payment_processor(
-                CashuUnit::Sat,
-                PaymentMethod::BOLT11,
-                MintMeltLimits::new(1, 2_000_000),
-                Arc::new(FeeReservePaddingProcessor {
-                    inner: processor,
-                    padding_sat: FEE_RESERVE_PADDING_SAT,
-                }),
-            )
-            .await?;
+        let processor = Arc::new(FeeReservePaddingProcessor {
+            inner: processor,
+            padding_sat: FEE_RESERVE_PADDING_SAT,
+        });
+        for method in [PaymentMethod::BOLT11, PaymentMethod::BOLT12] {
+            builder
+                .add_payment_processor(
+                    CashuUnit::Sat,
+                    method,
+                    MintMeltLimits::new(1, 2_000_000),
+                    processor.clone(),
+                )
+                .await?;
+        }
         let mint = Arc::new(builder.build_with_seed(database, seed).await?);
         mint.set_quote_ttl(QuoteTTL::new(120, 120)).await?;
         mint.start().await?;
 
-        let router = cdk_axum::create_mint_router(mint.clone(), vec!["bolt11".to_string()]).await?;
+        let router = cdk_axum::create_mint_router(
+            mint.clone(),
+            vec!["bolt11".to_string(), "bolt12".to_string()],
+        )
+        .await?;
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
         let handle = tokio::spawn(async move {
@@ -1189,8 +1200,22 @@ async fn processor_scenario(payer: &LdkNode, node: &LdkNode, logs: &Path) -> Res
     Ok(())
 }
 
+async fn await_cashu_refund(wallet: &Wallet, quote_id: &str, balance: cdk::Amount) -> Result<()> {
+    eventually("Cashu melt refund", NETWORK_TIMEOUT, || async {
+        wallet.finalize_pending_melts().await?;
+        let quote = wallet.check_melt_quote_status(quote_id).await?;
+        if quote.state != CashuMeltState::Unpaid {
+            return Ok(None);
+        }
+        assert!(quote.payment_proof.is_none());
+        Ok((wallet.total_balance().await? == balance).then_some(()))
+    })
+    .await
+}
+
 async fn cashu_scenario(
     payer: &LdkNode,
+    mint_node: &mut LdkNode,
     run_dir: &Path,
     mut process: ProcessorProcess,
 ) -> Result<()> {
@@ -1327,6 +1352,97 @@ async fn cashu_scenario(
     assert!(reset_quote.payment_proof.is_none());
     assert_eq!(wallet.total_balance().await?, before_failure);
 
+    eprintln!("running BOLT12 successful melt scenario");
+    let offer = rpc(payer
+        .client
+        .bolt12_receive(Bolt12ReceiveRequest {
+            description: "Cashu BOLT12 successful melt".to_string(),
+            amount_msat: Some(20_000),
+            expiry_secs: Some(3600),
+            quantity: None,
+        })
+        .await)?
+    .offer;
+    let quote = wallet
+        .melt_quote(PaymentMethod::BOLT12, offer, None, None)
+        .await?;
+    let prepared = wallet.prepare_melt(&quote.id, Default::default()).await?;
+    let result = tokio::time::timeout(NETWORK_TIMEOUT, prepared.confirm()).await??;
+    assert_eq!(result.state(), CashuMeltState::Paid);
+    assert!(result.payment_proof().is_some());
+
+    eprintln!("running expired BOLT12 offer scenario");
+    let offer = rpc(payer
+        .client
+        .bolt12_receive(Bolt12ReceiveRequest {
+            description: "Cashu BOLT12 expired offer".to_string(),
+            amount_msat: Some(20_000),
+            expiry_secs: Some(2),
+            quantity: None,
+        })
+        .await)?
+    .offer;
+    let expired_quote = wallet
+        .melt_quote(PaymentMethod::BOLT12, offer.clone(), None, None)
+        .await?;
+    let before_expired = wallet.total_balance().await?;
+    let prepared = wallet
+        .prepare_melt(&expired_quote.id, Default::default())
+        .await?;
+    let offer: lightning::offers::offer::Offer = offer
+        .parse()
+        .map_err(|error| anyhow::anyhow!("parse BOLT12 offer: {error:?}"))?;
+    eventually("BOLT12 offer expiry", NETWORK_TIMEOUT, || async {
+        Ok(offer.is_expired().then_some(()))
+    })
+    .await?;
+    let result = tokio::time::timeout(NETWORK_TIMEOUT, prepared.confirm_prefer_async()).await?;
+    assert!(
+        !matches!(result, Ok(MeltOutcome::Paid(_))),
+        "expired offer must not settle a melt"
+    );
+    await_cashu_refund(&wallet, &expired_quote.id, before_expired).await?;
+
+    eprintln!("running BOLT12 dispatch failure scenario");
+    let offer = rpc(payer
+        .client
+        .bolt12_receive(Bolt12ReceiveRequest {
+            description: "Cashu BOLT12 dispatch failure".to_string(),
+            amount_msat: Some(20_000),
+            expiry_secs: Some(3600),
+            quantity: None,
+        })
+        .await)?
+    .offer;
+    let quote = wallet
+        .melt_quote(PaymentMethod::BOLT12, offer, None, None)
+        .await?;
+    let before_dispatch = wallet.total_balance().await?;
+    let prepared = wallet.prepare_melt(&quote.id, Default::default()).await?;
+    mint_node.child.kill()?;
+    mint_node.child.wait()?;
+    let result = tokio::time::timeout(NETWORK_TIMEOUT, prepared.confirm_prefer_async()).await?;
+    assert!(
+        !matches!(result, Ok(MeltOutcome::Paid(_))),
+        "offline node must not settle a melt"
+    );
+    await_cashu_refund(&wallet, &quote.id, before_dispatch).await?;
+
+    mint.stop().await?;
+    let mint =
+        MintHttpServer::start(process.client().await?, &mint_db, &mint_seed, mint_port).await?;
+    assert_eq!(
+        wallet.check_melt_quote_status(&quote.id).await?.state,
+        CashuMeltState::Unpaid
+    );
+    assert_eq!(
+        wallet
+            .check_melt_quote_status(&expired_quote.id)
+            .await?
+            .state,
+        CashuMeltState::Unpaid
+    );
+    assert_eq!(wallet.total_balance().await?, before_dispatch);
     mint.stop().await?;
     process.stop().await?;
     Ok(())
@@ -1356,7 +1472,7 @@ async fn ldk_server_regtest_suite() -> Result<()> {
     .await
     .context("start payer node")?;
     eprintln!("payer node ready: {}", payer.node_id);
-    let mint_node = LdkNode::start(
+    let mut mint_node = LdkNode::start(
         &bitcoind,
         "ldk-regtest-mint",
         run_dir.join("node-mint"),
@@ -1405,7 +1521,7 @@ async fn ldk_server_regtest_suite() -> Result<()> {
     eprintln!("processor restart scenario complete");
     eprintln!("running Cashu mint/melt scenario");
     let process = ProcessorProcess::spawn(&mint_node, pick_port(), &logs).await?;
-    cashu_scenario(&payer, &run_dir, process)
+    cashu_scenario(&payer, &mut mint_node, &run_dir, process)
         .await
         .context("full Cashu mint/melt")?;
     eprintln!("Cashu mint/melt scenario complete");

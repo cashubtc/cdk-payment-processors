@@ -18,6 +18,7 @@ use cdk_common::util::{hex, unix_time};
 use cdk_common::QuoteId;
 use futures::Stream;
 use ldk_server_client::client::{EventStream, LdkServerClient};
+use ldk_server_client::error::LdkServerErrorCode;
 use ldk_server_client::ldk_server_grpc::api::{
     Bolt11ReceiveRequest, Bolt11SendRequest, Bolt12ReceiveRequest, Bolt12SendRequest,
     GetNodeInfoRequest, GetPaymentDetailsRequest, ListPaymentsRequest,
@@ -597,14 +598,41 @@ impl MintPayment for LdkServerBackend {
                 Ok(payment_response)
             }
             OutgoingPaymentOptions::Bolt12(bolt12_options) => {
-                let amount_msat = bolt12_amount_msat_for_send(&bolt12_options)?;
-                let route_parameters =
-                    route_parameters_from_max_fee(bolt12_options.max_fee_amount.clone())?;
+                let failed = || MakePaymentResponse {
+                    payment_lookup_id: PaymentIdentifier::QuoteId(bolt12_options.quote_id.clone()),
+                    payment_proof: None,
+                    status: MeltQuoteState::Failed,
+                    total_spent: Amount::new(0, unit.clone()),
+                };
+                let parameters = bolt12_amount_msat_for_send(&bolt12_options).and_then(|amount| {
+                    route_parameters_from_max_fee(bolt12_options.max_fee_amount.clone())
+                        .map(|route| (amount, route))
+                });
+                let (amount_msat, route_parameters) = match parameters {
+                    Ok(parameters) if !bolt12_options.offer.is_expired() => parameters,
+                    _ => return Ok(failed()),
+                };
+
+                // The pinned client does not distinguish connection failures from lost
+                // send responses. A failed read-only preflight is safe to report as a
+                // failure because Bolt12Send has not been called yet.
+                let preflight = tokio::time::timeout(
+                    Duration::from_secs(DEFAULT_PAYMENT_WAIT_SECS),
+                    self.client.get_node_info(GetNodeInfoRequest {}),
+                )
+                .await;
+                if !matches!(preflight, Ok(Ok(_))) {
+                    tracing::warn!(
+                        ?preflight,
+                        "BOLT12 preflight failed; payment was not dispatched"
+                    );
+                    return Ok(failed());
+                }
                 let context = OutgoingPaymentContext {
                     quote_id: bolt12_options.quote_id.clone(),
                     unit: unit.clone(),
                 };
-                let response = self
+                let response = match self
                     .client
                     .bolt12_send(Bolt12SendRequest {
                         offer: bolt12_options.offer.to_string(),
@@ -614,7 +642,14 @@ impl MintPayment for LdkServerBackend {
                         route_parameters,
                     })
                     .await
-                    .map_err(Error::from)?;
+                {
+                    Ok(response) => response,
+                    Err(error) if bolt12_dispatch_was_rejected(&error.error_code) => {
+                        tracing::warn!(%error, "LDK Server rejected BOLT12 dispatch");
+                        return Ok(failed());
+                    }
+                    Err(error) => return Err(Error::from(error).into()),
+                };
                 remember_outgoing_payment_context(
                     &self.outgoing_payment_correlations,
                     &response.payment_id,
@@ -622,9 +657,22 @@ impl MintPayment for LdkServerBackend {
                 )
                 .await;
                 let payment_id = hex_to_array(&response.payment_id)?;
-                let payment = self
+                let payment = match self
                     .wait_for_payment_details(&response.payment_id, bolt12_options.timeout_secs)
-                    .await?;
+                    .await
+                {
+                    Ok(payment) => payment,
+                    Err(error) => {
+                        tracing::warn!(%error, payment_id = %response.payment_id,
+                            "BOLT12 status unavailable after dispatch; preserving payment ID");
+                        return Ok(MakePaymentResponse {
+                            payment_lookup_id: PaymentIdentifier::PaymentId(payment_id),
+                            payment_proof: None,
+                            status: MeltQuoteState::Pending,
+                            total_spent: Amount::new(0, unit.clone()),
+                        });
+                    }
+                };
                 remember_outgoing_payment_keys(
                     &self.outgoing_payment_correlations,
                     &payment,
@@ -852,10 +900,18 @@ impl MintPayment for LdkServerBackend {
         match payment_identifier {
             PaymentIdentifier::PaymentId(payment_id) => {
                 let payment_id = hex::encode(payment_id);
-                let payment = self
-                    .get_payment_details(&payment_id)
-                    .await?
-                    .ok_or(Error::PaymentNotFound)?;
+                let payment = match self.get_payment_details(&payment_id).await {
+                    Ok(Some(payment)) => payment,
+                    result => {
+                        tracing::warn!(?result, %payment_id, "Outgoing payment status unavailable");
+                        return Ok(MakePaymentResponse {
+                            payment_lookup_id: payment_identifier.clone(),
+                            payment_proof: None,
+                            status: MeltQuoteState::Unknown,
+                            total_spent: Amount::new(0, CurrencyUnit::Msat),
+                        });
+                    }
+                };
 
                 if payment_direction(&payment)? != PaymentDirection::Outbound {
                     return Err(Error::InvalidPaymentDirection.into());
@@ -903,6 +959,16 @@ impl LdkServerBackend {
         let absolute_fee_reserve: u64 = self.fee_reserve.min_fee_reserve.into();
         Amount::new(relative_fee_reserve.max(absolute_fee_reserve), unit.clone())
     }
+}
+
+fn bolt12_dispatch_was_rejected(code: &LdkServerErrorCode) -> bool {
+    // Internal errors may follow dispatch, including a failure to persist a
+    // payment. LightningError also includes DuplicatePayment, so leave it
+    // ambiguous rather than treating every server error as a failed payment.
+    matches!(
+        code,
+        LdkServerErrorCode::InvalidRequestError | LdkServerErrorCode::AuthError
+    )
 }
 
 impl Drop for LdkServerBackend {
