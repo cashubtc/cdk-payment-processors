@@ -15,8 +15,9 @@ tls_client_ca_path = "certs/ca.pem"
 [ldk]
 # gRPC address of the LDK Server node, without scheme
 address = "127.0.0.1:3536"
-# HMAC API key (64-char hex)
-api_key = "your-api-key-hex-here"
+# Hex-encoded reusable v2 macaroon. Copy the text of
+# <storage>/<network>/macaroons/admin.macaroon. Do not hex-encode it again.
+macaroon = "your-admin-macaroon-hex-here"
 # PEM certificate to pin for the LDK Server connection
 tls_cert_path = "certs/ldk-server.crt"
 

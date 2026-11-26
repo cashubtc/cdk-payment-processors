@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Authenticate to ldk-server with a hex-encoded reusable v2 macaroon
+  (`ldk.macaroon` / `LDK_MACAROON`). The HMAC API key (`ldk.api_key` /
+  `LDK_API_KEY`) is no longer accepted.
+- Pin `ldk-server-client` to lightningdevkit/ldk-server `d7e7a2e`, including
+  macaroon auth, `Payment.payment_id`, and string page tokens.
+- Regtest reads `admin.macaroon`, opens channels with the amount oneof, and
+  fails held HTLCs with `Bolt11FailForId`.
 - Updated all CDK dependencies from `0.18.1` to `0.18.2`.
 
 ### Fixed

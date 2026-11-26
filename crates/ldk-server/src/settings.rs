@@ -98,8 +98,8 @@ fn split_method_list(value: &str) -> Vec<String> {
 pub struct BackendConfig {
     /// LDK Server gRPC address without scheme, e.g. "127.0.0.1:3536".
     pub address: String,
-    /// HMAC API key expected by LDK Server (64-char hex).
-    pub api_key: String,
+    /// Hex-encoded reusable v2 macaroon from `<storage>/<network>/macaroons/admin.macaroon`.
+    pub macaroon: String,
     /// Path to the PEM TLS certificate to pin for the LDK Server connection.
     pub tls_cert_path: String,
     /// Minimum absolute fee reserve for melt quotes, in satoshis.
@@ -128,7 +128,7 @@ impl Default for BackendConfig {
     fn default() -> Self {
         Self {
             address: String::new(),
-            api_key: String::new(),
+            macaroon: String::new(),
             tls_cert_path: String::new(),
             fee_reserve_min_sat: default_fee_reserve_min_sat(),
             fee_reserve_percent: default_fee_reserve_percent(),
@@ -241,7 +241,12 @@ impl Config {
     pub fn load() -> Result<Self> {
         let cfg = extract_config(config_figment())?;
         anyhow::ensure!(!cfg.ldk.address.is_empty(), "ldk.address is required");
-        anyhow::ensure!(!cfg.ldk.api_key.is_empty(), "ldk.api_key is required");
+        if std::env::var_os("LDK_API_KEY").is_some() {
+            anyhow::bail!(
+                "LDK_API_KEY is no longer accepted. Set LDK_MACAROON to the hex-encoded reusable v2 macaroon"
+            );
+        }
+        anyhow::ensure!(!cfg.ldk.macaroon.is_empty(), "ldk.macaroon is required");
         anyhow::ensure!(
             !cfg.ldk.tls_cert_path.is_empty(),
             "ldk.tls_cert_path is required"
